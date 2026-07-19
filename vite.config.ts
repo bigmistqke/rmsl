@@ -5,8 +5,16 @@ import dts from 'vite-plugin-dts'
 export default defineConfig({
   build: {
     lib: {
+      // "../rmsl" is deliberately absent from `rollupOptions.external` below:
+      // marking it external makes Rollup emit a bare relative specifier
+      // ("./rmsl", no extension) that plain Node ESM refuses to resolve. Left
+      // alone, Rollup recognizes that "../rmsl" is itself one of this build's
+      // entry points and wires dist/webgl.js to import dist/rmsl.js directly —
+      // one copy of the compiler on disk, and every emitted entry still loads
+      // standalone.
       entry: {
         rmsl: 'src/rmsl.ts',
+        webgl: 'src/webgl/index.ts',
         vite: 'src/vite.ts',
         effects: 'src/effects/index.ts',
         scene: 'src/scene/index.ts',
@@ -22,15 +30,16 @@ export default defineConfig({
     dts({
       include: [
         'src/rmsl.ts',
+        'src/webgl/**/*.ts',
         'src/vite.ts',
         'src/effects/index.ts',
         'src/effects/*.ts',
         'src/scene/index.ts',
         'src/scene/**/*.ts',
       ],
-      exclude: ['src/**/*.test.ts'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.test-d.ts'],
       outDir: 'dist',
-      rollupTypes: true,
+      rollupTypes: false,
     }),
     {
       // tsc does not carry a `/// <reference types>` directive into emitted
