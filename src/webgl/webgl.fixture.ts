@@ -11,8 +11,8 @@
  * of the page.
  */
 
-import { Fn, attribute, compileGLSL, uniform, vec4 } from "../rmsl";
-import { createWebGLProgram } from "./index";
+import { Fn, attribute, compileGLSL, uniform, vec4 } from "../rmsl.js";
+import { createWebGLProgram } from "./index.js";
 
 /**
  * Renders one pixel whose colour is a uniform, and reads it back.

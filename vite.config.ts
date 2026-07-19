@@ -48,20 +48,6 @@ export default defineConfig({
       // what catches that: it fails to type-check the moment bundleTypes is
       // true, even though the build itself looks clean.
       bundleTypes: false,
-      // Per-file declarations still emit bare relative specifiers ("./program",
-      // "../rmsl") between entries, and plain Node ESM resolution (node16,
-      // nodenext) refuses those without an extension. Rollup already avoids
-      // the equivalent problem for the JS output (see the `lib.entry` comment
-      // above); nothing upstream does the same for .d.ts, so it's done here by
-      // hand on the way out.
-      beforeWriteFile: (filePath, content) => ({
-        filePath,
-        content: content.replace(
-          /(\bfrom\s+['"])(\.\.?\/[^'"]+)(['"])/g,
-          (match, prefix, specifier, suffix) =>
-            /\.[mc]?[tj]s$/.test(specifier) ? match : `${prefix}${specifier}.js${suffix}`,
-        ),
-      }),
     }),
     {
       // tsc does not carry a `/// <reference types>` directive into emitted
