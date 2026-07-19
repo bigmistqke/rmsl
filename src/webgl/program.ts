@@ -7,8 +7,8 @@
  * what survived — and only the second one can be set.
  */
 
-import { compileGLSL, type Node, type ShaderType } from "../rmsl.js";
-import { createUniformSetter, type Setter } from "./uniforms.js";
+import { compileGLSL, type Node, type ShaderType } from "../rmsl";
+import { createUniformSetter, type Setter } from "./uniforms";
 
 type Root = Node<ShaderType> | Node<ShaderType>[];
 

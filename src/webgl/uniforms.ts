@@ -10,7 +10,7 @@
  * built and what it kept.
  */
 
-import type { ShaderType, UniformNode } from "../rmsl.js";
+import type { ShaderType, UniformNode } from "../rmsl";
 
 /**
  * A fixed-length array, built one element at a time.

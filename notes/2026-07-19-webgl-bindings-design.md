@@ -246,27 +246,45 @@ implemented, `set` on a matrix attribute throws with a message saying so.
 
 ## Open for the project, not for this slice
 
-**Module resolution.** The published declarations name their relative imports
-with a `.js` extension, because without one they do not resolve under
-TypeScript's `node16` / `nodenext` resolution — and with `skipLibCheck: true`,
-which most consumers set, that failure is silent: no error, every type in the
-entry point quietly becomes `any`.
+**Module resolution — a known limitation, accepted for now.**
 
-This project resolves modules the way a bundler does, which accepts an import
-with no extension. So the convention holds today but nothing enforces it: one
-extensionless import would type-check, test and build without complaint, and
-the breakage would only appear in someone else's project.
+`rmsl/webgl` does not resolve under TypeScript's `node16` / `nodenext` module
+resolution. The published declarations name their relative imports without a
+file extension (`from "./program"`), which those modes reject. With
+`skipLibCheck: true`, which most consumers set, there is no error at all —
+every type in the entry point silently becomes `any`, so `set` stops being
+checked while appearing to work.
 
-The proper fix is for the project to adopt `nodenext` resolution itself, which
-enforces the rule everywhere rather than for one directory. That is a decision
-about the whole codebase — it would require an extension on every relative
-import in `src/` — so it belongs to a separate discussion rather than to this
-slice.
+Consumers on `moduleResolution: "bundler"` — which a bundled browser app
+normally uses, and which this project uses itself — are unaffected.
 
-A stopgap was tried and backed out: a second tsconfig checking only the
-published sources under `node16`, wired into `type-check`. It works and reports
-the error at the offending import, but it solves for one directory a question
-the project should answer once.
+**Decision:** start by not supporting `node16`. A WebGL binding is consumed by
+browser applications, which are bundled, so the affected audience is someone
+type-checking a browser project under `nodenext`. Rather than half-solve it
+here, the project settles module resolution once, for every entry point.
+
+Two approaches were tried and backed out, recorded so they are not
+rediscovered:
+
+- **Writing `.js` in the source specifiers.** Works — the declaration emitter
+  copies whatever the source wrote, and `bundler` resolution accepts the
+  extension too, so no config change is needed. But it leaves four imports
+  carrying an extension this project does not otherwise use, with nothing
+  enforcing the next one.
+- **A second tsconfig checking the published sources under `node16`**, wired
+  into `type-check`. Reports the error at the offending import with the
+  correction. Backed out for solving in one directory what belongs to the
+  whole codebase.
+
+The principled fix is for the project to adopt `nodenext` itself, which
+enforces the rule everywhere — at the cost of an extension on every relative
+import in `src/`.
+
+Also rejected: `bundleTypes` (api-extractor), which would remove relative
+imports from the declarations entirely. It re-declares `BaseNode`'s private
+`__brand` symbol per entry, so a `Node` from `rmsl` and a `UniformNode` from
+`rmsl/webgl` stop being the same type. `apps/infinite-grid` imports from both
+and fails to type-check the moment it is enabled.
 
 ## Bugs found in view.gl — fix, do not port
 

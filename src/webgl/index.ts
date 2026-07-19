@@ -7,5 +7,5 @@
  * WebGL2 only — RMSL compiles to GLSL ES 3.0, which WebGL1 cannot load.
  */
 
-export { createWebGLProgram, reflectUniforms } from "./program.js";
-export type { Setter, UniformArgs, SettableType, Mat, Tuple } from "./uniforms.js";
+export { createWebGLProgram, reflectUniforms } from "./program";
+export type { Setter, UniformArgs, SettableType, Mat, Tuple } from "./uniforms";
