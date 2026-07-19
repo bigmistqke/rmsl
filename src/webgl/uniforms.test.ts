@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { uniform } from "../rmsl";
+import { uniform, uniformArray } from "../rmsl";
 import { createUniformSetter } from "./uniforms";
 
 /** A stub recording every uniform call, standing in for a GL context. */
@@ -141,6 +141,76 @@ describe("a uniform the program does not have", () => {
     set(uniform("float"), 2);
 
     expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+});
+
+describe("uniform arrays", () => {
+  it("writes a vec4 array through uniform4fv with the buffer", () => {
+    const u = uniformArray("vec4", 4);
+    const { set, calls, location } = setterFor(u);
+    const data = new Float32Array(16);
+    set(u, data);
+    expect(calls).toEqual([{ fn: "uniform4fv", args: [location, data] }]);
+  });
+
+  it("writes a float array through uniform1fv", () => {
+    const u = uniformArray("float", 8);
+    const { set, calls, location } = setterFor(u);
+    const data = new Float32Array(8);
+    set(u, data);
+    expect(calls).toEqual([{ fn: "uniform1fv", args: [location, data] }]);
+  });
+
+  it("writes a mat4 array through uniformMatrix4fv with transpose off", () => {
+    const u = uniformArray("mat4", 2);
+    const { set, calls, location } = setterFor(u);
+    const data = new Float32Array(32);
+    set(u, data);
+    expect(calls).toEqual([{ fn: "uniformMatrix4fv", args: [location, false, data] }]);
+  });
+
+  it("writes an int array through uniform1iv", () => {
+    const u = uniformArray("int", 5);
+    const { set, calls, location } = setterFor(u);
+    const data = new Int32Array(5);
+    set(u, data);
+    expect(calls).toEqual([{ fn: "uniform1iv", args: [location, data] }]);
+  });
+
+  // A bulk upload has no per-element brand to lean on, so a wrong-length
+  // buffer is only ever caught here, at the boundary, rather than by the type
+  // checker.
+  it("throws when the data length does not match the array's size", () => {
+    const u = uniformArray("vec4", 4);
+    const { set } = setterFor(u);
+    const data = new Float32Array(10);
+    expect(() => set(u, data)).toThrow(
+      "[RMSL] vec4[4] needs 16 numbers, got 10.",
+    );
+  });
+
+  // Bulk uploads accept a typed array or a plain array, so a caller that built
+  // its data with ordinary numbers is not forced to convert it.
+  it("accepts a plain number[], not only a typed array", () => {
+    const u = uniformArray("vec4", 1);
+    const { set, calls, location } = setterFor(u);
+    const data = [1, 2, 3, 4];
+    set(u, data);
+    expect(calls).toEqual([{ fn: "uniform4fv", args: [location, data] }]);
+  });
+
+  it("warns once and does not upload when the array has no location", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { gl, calls } = recorder();
+    const u = uniformArray("vec4", 4);
+    const set = createUniformSetter(gl, new Map());
+
+    set(u, new Float32Array(16));
+    set(u, new Float32Array(16));
+
+    expect(calls).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
 });

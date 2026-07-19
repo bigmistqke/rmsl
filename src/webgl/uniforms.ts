@@ -10,7 +10,7 @@
  * built and what it kept.
  */
 
-import type { ShaderType, UniformNode } from "../rmsl";
+import type { ShaderType, UniformArrayNode, UniformNode } from "../rmsl";
 
 /**
  * A fixed-length array, built one element at a time.
@@ -114,6 +114,110 @@ const WRITERS: Record<SettableType, Writer> = {
 };
 
 /**
+ * Every element type `uniformArray` can hold. Samplers are excluded because
+ * `uniformArray` itself throws for them — there is no texture-array uniform
+ * to reach this code, so it needs no handling here either.
+ */
+export type SettableArrayType = Exclude<SettableType, "sampler2D" | "samplerCube">;
+
+/**
+ * How many numbers one element occupies, so a bulk upload's length can be
+ * checked against `node.length`. Written out for the same reason `WRITERS`
+ * is: deriving a matrix's element count from its name is what turns mat3
+ * into 3, not 9.
+ */
+const ELEMENT_COMPONENTS: Record<SettableArrayType, number> = {
+  float: 1, int: 1, uint: 1, bool: 1,
+
+  vec2: 2, bvec2: 2,
+  vec3: 3, bvec3: 3,
+  vec4: 4, bvec4: 4,
+
+  mat2: 4,
+  mat2x3: 6, mat3x2: 6,
+  mat2x4: 8, mat4x2: 8,
+  mat3: 9,
+  mat3x4: 12, mat4x3: 12,
+  mat4: 16,
+};
+
+type FloatBuffer = Float32Array | number[];
+type IntBuffer = Int32Array | number[];
+type UintBuffer = Uint32Array | number[];
+
+/**
+ * What a bulk upload accepts for each element type.
+ *
+ * This is not `UniformArgs` widened to arrays: a bulk upload takes one flat
+ * buffer of every element's components concatenated, not a tuple per
+ * element, so the shape is entirely different from the scalar case.
+ *
+ * Booleans are numbers here, unlike `UniformArgs["bool"]`. The scalar setter
+ * accepts `boolean` because converting one value is free; converting a whole
+ * array would mean allocating a copy every time a bulk upload runs, which is
+ * exactly the cost a bulk upload exists to avoid.
+ */
+export interface ArrayData {
+  float: FloatBuffer;
+  vec2: FloatBuffer;
+  vec3: FloatBuffer;
+  vec4: FloatBuffer;
+
+  int: IntBuffer;
+  bool: IntBuffer;
+  bvec2: IntBuffer;
+  bvec3: IntBuffer;
+  bvec4: IntBuffer;
+
+  uint: UintBuffer;
+
+  mat2: FloatBuffer;
+  mat2x3: FloatBuffer;
+  mat2x4: FloatBuffer;
+  mat3x2: FloatBuffer;
+  mat3: FloatBuffer;
+  mat3x4: FloatBuffer;
+  mat4x2: FloatBuffer;
+  mat4x3: FloatBuffer;
+  mat4: FloatBuffer;
+}
+
+/** Writes an already-located array uniform from one flat buffer. */
+type ArrayWriter = (
+  gl: WebGL2RenderingContext,
+  location: WebGLUniformLocation,
+  data: FloatBuffer | IntBuffer | UintBuffer,
+) => void;
+
+const ARRAY_WRITERS: Record<SettableArrayType, ArrayWriter> = {
+  float: (gl, l, d) => gl.uniform1fv(l, d as FloatBuffer),
+  vec2: (gl, l, d) => gl.uniform2fv(l, d as FloatBuffer),
+  vec3: (gl, l, d) => gl.uniform3fv(l, d as FloatBuffer),
+  vec4: (gl, l, d) => gl.uniform4fv(l, d as FloatBuffer),
+
+  int: (gl, l, d) => gl.uniform1iv(l, d as IntBuffer),
+  uint: (gl, l, d) => gl.uniform1uiv(l, d as UintBuffer),
+
+  // Booleans go through the integer calls, as they do for scalars.
+  bool: (gl, l, d) => gl.uniform1iv(l, d as IntBuffer),
+  bvec2: (gl, l, d) => gl.uniform2iv(l, d as IntBuffer),
+  bvec3: (gl, l, d) => gl.uniform3iv(l, d as IntBuffer),
+  bvec4: (gl, l, d) => gl.uniform4iv(l, d as IntBuffer),
+
+  // Matrices use the same calls as the scalar case: `uniformMatrix4fv`
+  // already takes a buffer, so an array of them is just a longer buffer.
+  mat2: (gl, l, d) => gl.uniformMatrix2fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat2x3: (gl, l, d) => gl.uniformMatrix2x3fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat2x4: (gl, l, d) => gl.uniformMatrix2x4fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat3x2: (gl, l, d) => gl.uniformMatrix3x2fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat3: (gl, l, d) => gl.uniformMatrix3fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat3x4: (gl, l, d) => gl.uniformMatrix3x4fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat4x2: (gl, l, d) => gl.uniformMatrix4x2fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat4x3: (gl, l, d) => gl.uniformMatrix4x3fv(l, NO_TRANSPOSE, d as FloatBuffer),
+  mat4: (gl, l, d) => gl.uniformMatrix4fv(l, NO_TRANSPOSE, d as FloatBuffer),
+};
+
+/**
  * Writes a shader input, taking the node itself rather than a name.
  *
  * One function rather than one per kind. `UniformNode` narrows `type` to
@@ -127,11 +231,16 @@ const WRITERS: Record<SettableType, Writer> = {
  * argument list resolve. `_t` holds the same type as a plain string — declared
  * `string`, not `A`, so it cannot drive the types — and is read only to pick
  * the call.
+ *
+ * The array overload mirrors that split. `UniformArrayNode` does not expose
+ * `_t` or `type` on its interface — only `name`, `length` and `element()` —
+ * though both are present at runtime, same as a scalar node. Reading them
+ * needs a cast, exactly as it does for `_t` above.
  */
-export type Setter = <A extends SettableType>(
-  node: UniformNode<A>,
-  ...args: UniformArgs[A]
-) => void;
+export type Setter = {
+  <A extends SettableType>(node: UniformNode<A>, ...args: UniformArgs[A]): void;
+  <A extends SettableArrayType>(node: UniformArrayNode<A>, data: ArrayData[A]): void;
+};
 
 export function createUniformSetter(
   gl: WebGL2RenderingContext,
@@ -141,7 +250,9 @@ export function createUniformSetter(
   // otherwise report itself thousands of times a second.
   const reported = new Set<string>();
 
-  return (node, ...args) => {
+  // Untyped here and cast to `Setter` on return: one function body cannot
+  // itself satisfy an overloaded call signature, only be assignable to it.
+  function set(node: any, ...args: any[]): void {
     const location = locations.get(node.name);
     if (!location) {
       if (!reported.has(node.name)) {
@@ -155,8 +266,32 @@ export function createUniformSetter(
       }
       return;
     }
+
+    // `type === "uniformArray"` names the actual discriminant — the same one
+    // `isUniformNode`/`isAttributeNode` check in rmsl.ts — rather than
+    // leaning on `length` merely happening to be absent from a scalar node.
+    if (node.type === "uniformArray") {
+      const elementType = node._t as SettableArrayType;
+      const data = args[0];
+      const expected = node.length * ELEMENT_COMPONENTS[elementType];
+      if (data.length !== expected) {
+        throw new Error(
+          `[RMSL] ${elementType}[${node.length}] needs ${expected} numbers, `
+          + `got ${data.length}.`,
+        );
+      }
+      const arrayWriter = ARRAY_WRITERS[elementType];
+      if (!arrayWriter) {
+        throw new Error(`[RMSL] ${elementType} is not a uniform type that can be set.`);
+      }
+      arrayWriter(gl, location, data);
+      return;
+    }
+
     const writer = WRITERS[node._t as SettableType];
     if (!writer) throw new Error(`[RMSL] ${node._t} is not a uniform type that can be set.`);
     writer(gl, location, args);
-  };
+  }
+
+  return set as Setter;
 }

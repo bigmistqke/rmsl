@@ -9,7 +9,7 @@
 
 import { describe, it, expectTypeOf } from "vitest";
 import type { UniformArgs, Mat, Tuple } from "./uniforms";
-import { uniform, attribute, varying } from "../rmsl";
+import { uniform, uniformArray, attribute, varying } from "../rmsl";
 import { createUniformSetter } from "./uniforms";
 
 declare const set: ReturnType<typeof createUniformSetter>;
@@ -106,5 +106,24 @@ describe("inference from the node", () => {
     set(attribute("vec3"), 1, 2, 3);
     // @ts-expect-error a varying is written by the shader, not by the host
     set(varying("float"), 1);
+  });
+});
+
+describe("uniform arrays", () => {
+  it("takes one flat buffer of the element type's data", () => {
+    set(uniformArray("vec4", 4), new Float32Array(16));
+    // The buffer's length is only checked at runtime — a fixed-length array
+    // type could not describe every valid length a caller might build.
+    set(uniformArray("vec4", 4), [1, 2, 3]);
+  });
+
+  it("rejects a bare buffer where a scalar uniform expects components", () => {
+    // @ts-expect-error a vec4 uniform takes four numbers, not a Float32Array
+    set(uniform("vec4"), new Float32Array(16));
+  });
+
+  it("rejects loose components where an array node expects one buffer", () => {
+    // @ts-expect-error an array node takes one buffer argument, not components
+    set(uniformArray("vec4", 4), 1, 2, 3, 4);
   });
 });

@@ -87,4 +87,14 @@ describe.skipIf(SKIPPED)("against a real context", () => {
     expect(declared).toBe(true);
     expect(warnings).toBe(1);
   }, 120_000);
+
+  // The stub cannot exercise this: an array uniform is reported under a
+  // "[0]"-suffixed name, and only a real linked program reports it that way.
+  it("delivers one element of a uniform array to the shader", async () => {
+    const [r, g, b, a] = await runInPage("probeUniformArray()");
+    expect(r).toBeCloseTo(0.1, 5);
+    expect(g).toBeCloseTo(0.2, 5);
+    expect(b).toBeCloseTo(0.3, 5);
+    expect(a).toBeCloseTo(0.4, 5);
+  }, 120_000);
 });

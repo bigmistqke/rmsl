@@ -11,7 +11,7 @@
  * of the page.
  */
 
-import { Fn, attribute, compileGLSL, uniform, vec4 } from "../rmsl";
+import { Fn, attribute, compileGLSL, uniform, uniformArray, vec4 } from "../rmsl";
 import { createWebGLProgram } from "./index";
 
 /**
@@ -117,4 +117,66 @@ export function probeEliminated(): { declared: boolean; warnings: number } {
     console.warn = original;
   }
   return { declared, warnings };
+}
+
+/**
+ * Renders one pixel whose colour is one element of a uniform array, and
+ * reads it back.
+ *
+ * A recording stub cannot show this working: `reflectUniforms` has to strip
+ * the "[0]" suffix WebGL reports an array uniform's name under before
+ * `set`'s lookup by `node.name` can even find a location, and only a real
+ * linked program reports a name that way. Reading back the middle element
+ * (rather than the first) also rules out `element()` silently resolving to
+ * index 0 regardless of what was asked for.
+ */
+export function probeUniformArray(): number[] {
+  const position = attribute("vec2");
+  const colours = uniformArray("vec4", 3);
+
+  const vertexMain = Fn(() => vec4(position.x, position.y, 0.0, 1.0));
+  const fragmentMain = Fn(() => colours.element(1));
+
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2");
+  if (!gl) throw new Error("WebGL2 unavailable in the test browser");
+  if (!gl.getExtension("EXT_color_buffer_float")) {
+    throw new Error("EXT_color_buffer_float unavailable; cannot read a float back");
+  }
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0,
+  );
+
+  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+  gl.useProgram(program);
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW,
+  );
+  const location = gl.getAttribLocation(program, position.name);
+  gl.enableVertexAttribArray(location);
+  gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0);
+
+  // Each element gets a distinct value, so reading back element 1 rather than
+  // element 0 or 2 is what proves the right slot of the buffer was read.
+  set(colours, [
+    0.9, 0.9, 0.9, 0.9,
+    0.1, 0.2, 0.3, 0.4,
+    0.6, 0.7, 0.8, 0.5,
+  ]);
+
+  gl.viewport(0, 0, 1, 1);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  const out = new Float32Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, out);
+  return [out[0]!, out[1]!, out[2]!, out[3]!];
 }
