@@ -125,10 +125,9 @@ The design does not try to anticipate this. It takes a hard dependency on
 `WebGL2RenderingContext` and states it, so a future GLSL ES 1.0 backend arrives
 as a deliberate piece of work rather than a surprise.
 
-### Array uniforms
+### Array uniforms — implemented
 
-Landed on `apps/breakout` (`89ea271`), not yet on the base this worktree sits
-on:
+On the base branch, and `set` writes them:
 
 ```ts
 export interface UniformArrayNode<A extends ShaderType> {
@@ -146,30 +145,44 @@ no operations, only its elements do. So it is a separate type, not a variant of
 signature:
 
 ```ts
-set<A>(node: UniformNode<A>, ...args: UniformArgs[A]): void
-set<A>(node: UniformArrayNode<A>, data: Float32Array | number[]): void
+set<A extends SettableType>(node: UniformNode<A>, ...args: UniformArgs[A]): void
+set<A extends SettableArrayType>(node: UniformArrayNode<A>, data: ArrayData[A]): void
 ```
 
-`UniformArgs` stays keyed on the element type and is reused by both — array-ness
-is an axis, not a kind. Uploading is `uniform{N}fv` / `uniformMatrix{N}fv` with
-the element type's suffix.
+Keyed on the element type, but the argument is **not** `UniformArgs`. A scalar
+takes its components spread out; an array takes one flat buffer, because
+spelling out 96 numbers is not an API. So `ArrayData` is its own table:
+`Float32Array | number[]` for float, vector and matrix elements,
+`Int32Array | number[]` for int and boolean ones, `Uint32Array | number[]` for
+`uint`. Uploading goes through the `v`-suffixed calls; matrices reuse
+`uniformMatrix{N}fv`, which already took a buffer.
+
+Booleans are numbers here, unlike the scalar path. Converting one value is
+free; converting a whole array would allocate a copy every frame, which is what
+a bulk upload exists to avoid.
 
 Three things this forces:
 
 - **`getActiveUniform` reports array uniforms as `_rmsl_u3[0]`**, not
-  `_rmsl_u3`. The reflect loop must strip a trailing `[0]` or every array lookup
+  `_rmsl_u3`. The reflect loop strips a trailing `[0]` or every array lookup
   misses.
-- **Length is checkable.** `getActiveUniform` reports `size` as the array
-  length, and `UniformArrayNode` carries `length`. A mismatch means the shader
-  and the host disagree, and is worth warning about. view.gl cannot do this —
-  its `size` comes from the same declaration it would be validating.
+- **The data length is checked, and throws.** It must equal
+  `node.length × components`, and a mismatch is a caller mistake rather than
+  something ordinary — unlike a uniform GLSL eliminated, which warns.
 - **No element-wise setter for free.** `element()` returns an expression node,
   not a handle. Bulk upload is the primary operation; `setElement(node, i, …)`
   can follow later if wanted.
 
+**Rejected: cross-checking `node.length` against the size `getActiveUniform`
+reports.** An earlier draft of this document proposed it as something view.gl
+cannot do. It is wrong. The GL spec permits a driver to report *fewer* active
+array elements than were declared when the trailing ones are unused, so a
+mismatch is frequently a legitimate optimisation rather than a disagreement
+between shader and host. The check would warn on correct programs.
+
 The interface exposes `name` and `length` but not `_t`, though it is present at
-runtime. Runtime dispatch needs a cast, or the interface needs `_t` added
-upstream.
+runtime. Runtime dispatch reads it through a cast, as the scalar path does, and
+discriminates the two overloads on `type === "uniformArray"`.
 
 Two things from view.gl to avoid: the phantom `TSize` that leaves
 `UniformArrayMethods` index-unchecked, and the sampler branch that returns a
