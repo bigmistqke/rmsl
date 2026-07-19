@@ -22,24 +22,24 @@
   "types": "./dist/rmsl.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/rmsl.js",
-      "types": "./dist/rmsl.d.ts"
+      "types": "./dist/rmsl.d.ts",
+      "import": "./dist/rmsl.js"
     },
     "./webgl": {
-      "import": "./dist/webgl.js",
-      "types": "./dist/webgl/index.d.ts"
+      "types": "./dist/webgl/index.d.ts",
+      "import": "./dist/webgl.js"
     },
     "./vite": {
-      "import": "./dist/vite.js",
-      "types": "./dist/vite.d.ts"
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
     },
     "./effects": {
-      "import": "./dist/effects.js",
-      "types": "./dist/effects/index.d.ts"
+      "types": "./dist/effects/index.d.ts",
+      "import": "./dist/effects.js"
     },
     "./scene": {
-      "import": "./dist/scene.js",
-      "types": "./dist/scene/index.d.ts"
+      "types": "./dist/scene/index.d.ts",
+      "import": "./dist/scene.js"
     }
   },
   "scripts": {
