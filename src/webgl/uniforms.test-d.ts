@@ -9,6 +9,10 @@
 
 import { describe, it, expectTypeOf } from "vitest";
 import type { UniformArgs, Mat, Tuple } from "./uniforms";
+import { uniform, attribute, varying } from "../rmsl";
+import { createUniformSetter } from "./uniforms";
+
+declare const set: ReturnType<typeof createUniformSetter>;
 
 describe("argument tuples", () => {
   it("gives each scalar and vector its component count", () => {
@@ -62,5 +66,45 @@ describe("void", () => {
   // something a host can write.
   it("is not settable", () => {
     expectTypeOf<"void">().not.toMatchTypeOf<keyof UniformArgs>();
+  });
+});
+
+describe("inference from the node", () => {
+  // Nothing here annotates a type. If the brand ever stops carrying the type
+  // parameter these all collapse to `any` and the checking silently stops.
+  it("takes the component count the shader type has", () => {
+    set(uniform("float"), 1);
+    set(uniform("vec2"), 1, 2);
+    set(uniform("vec3"), 1, 2, 3);
+    set(uniform("vec4"), 1, 2, 3, 4);
+  });
+
+  it("rejects the wrong number of components", () => {
+    // @ts-expect-error a vec3 takes three components, not one
+    set(uniform("vec3"), 1);
+    // @ts-expect-error a float takes one component, not two
+    set(uniform("float"), 1, 2);
+  });
+
+  it("rejects the wrong component type", () => {
+    // @ts-expect-error a vec2 is written with numbers
+    set(uniform("vec2"), "1", "2");
+  });
+
+  // The check that view.gl's phantom length parameter cannot make.
+  it("rejects a matrix of the wrong length", () => {
+    // @ts-expect-error a mat4 holds sixteen elements, not nine
+    set(uniform("mat4"), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  // The three variable node types used to be aliases of one another, so this
+  // was accepted. They now narrow `type` to the string each constructor
+  // writes, which is what lets one `set` take a uniform and later an
+  // attribute and give each its own arguments.
+  it("rejects a node that is not a uniform", () => {
+    // @ts-expect-error an attribute is written with a buffer, not components
+    set(attribute("vec3"), 1, 2, 3);
+    // @ts-expect-error a varying is written by the shader, not by the host
+    set(varying("float"), 1);
   });
 });
