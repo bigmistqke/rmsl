@@ -78,9 +78,13 @@ describe.skipIf(SKIPPED)("against a real context", () => {
     expect(b).toBeCloseTo(0.75, 5);
   }, 120_000);
 
-  // The stub test asserts this too, but only here is the uniform genuinely
-  // absent — removed by the real GLSL compiler rather than left out of a map.
-  it("warns once for a uniform GLSL removed, however often it is set", async () => {
-    expect(await runInPage("probeEliminated()")).toBe(1);
+  // The stub test asserts the warning behaviour too, but only here can the
+  // uniform be genuinely absent from the linked program while still having
+  // been declared in the GLSL text — removed by the real GLSL compiler's
+  // dead-code elimination rather than left out of a map.
+  it("warns once for a uniform the driver eliminated, however often it is set", async () => {
+    const { declared, warnings } = await runInPage("probeEliminated()");
+    expect(declared).toBe(true);
+    expect(warnings).toBe(1);
   }, 120_000);
 });

@@ -7,10 +7,11 @@
  * which is what lets it call the actual compiler and the actual setter rather
  * than a hand-written stand-in.
  *
- * Only numbers are returned: a WebGL context cannot be passed out of the page.
+ * Only serialisable values are returned: a WebGL context cannot be passed out
+ * of the page.
  */
 
-import { Fn, attribute, uniform, vec4 } from "../rmsl";
+import { Fn, attribute, compileGLSL, uniform, vec4 } from "../rmsl";
 import { createWebGLProgram } from "./index";
 
 /**
@@ -67,24 +68,42 @@ export function probeUniform(): number[] {
 }
 
 /**
- * Sets a uniform the shader does not use.
+ * Sets a uniform the shader declares but the driver eliminates.
  *
- * GLSL removes a uniform whose value cannot reach the output, so this is the
- * ordinary case rather than a mistake. Returns the number of warnings seen,
- * which must be one however many times it is set.
+ * `unused` is referenced from the fragment graph — via `.toVar()`, which
+ * emits a `let` statement into the shader body — so RMSL declares it and
+ * writes a real reference to it into the GLSL text. But the resulting
+ * variable is never read afterward, so it cannot reach the shader's output;
+ * a real GLSL compiler's dead-code elimination drops the statement (and with
+ * it the only use of the uniform), same as it would for a uniform that
+ * reaches an `if` branch the caller can prove is never taken. RMSL's own
+ * folding only touches literal-against-literal operations (`tryFold` in
+ * ../rmsl), so this is not RMSL quietly optimising the uniform away itself —
+ * the elimination has to come from the driver.
+ *
+ * Returns whether the emitted GLSL actually declared the uniform (proving
+ * the driver had something to eliminate, not just an absence from a map)
+ * alongside the warning count, which must be one however many times it is
+ * set once the driver has eliminated it.
  */
-export function probeEliminated(): number {
+export function probeEliminated(): { declared: boolean; warnings: number } {
   const position = attribute("vec2");
   const unused = uniform("float");
 
   const vertexMain = Fn(() => vec4(position.x, position.y, 0.0, 1.0));
-  const fragmentMain = Fn(() => vec4(1.0, 0.0, 0.0, 1.0));
+  const fragmentMain = Fn(() => {
+    unused.mult(2.0).toVar();
+    return vec4(1.0, 0.0, 0.0, 1.0);
+  });
+
+  const fragmentRoot = fragmentMain();
+  const declared = compileGLSL.fragment(fragmentRoot).includes(unused.name);
 
   const canvas = document.createElement("canvas");
   const gl = canvas.getContext("webgl2");
   if (!gl) throw new Error("WebGL2 unavailable in the test browser");
 
-  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentRoot);
   gl.useProgram(program);
 
   let warnings = 0;
@@ -97,5 +116,5 @@ export function probeEliminated(): number {
   } finally {
     console.warn = original;
   }
-  return warnings;
+  return { declared, warnings };
 }
