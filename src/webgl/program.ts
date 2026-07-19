@@ -7,10 +7,13 @@
  * what survived — and only the second one can be set.
  */
 
-import { compileGLSL, type Node, type ShaderType } from "../rmsl";
+import { compileGLSL, type Node, type ShaderType, type VertexRoot } from "../rmsl";
 import { createUniformSetter, type Setter } from "./uniforms";
 
-type Root = Node<ShaderType> | Node<ShaderType>[];
+// The two stages do not accept the same thing. A vertex result has to be able
+// to become a position, so the compiler narrows it to vec4; a fragment result
+// is whatever the outputs were declared as.
+type FragmentRoot = Node<ShaderType> | Node<ShaderType>[];
 
 function compileShader(
   gl: WebGL2RenderingContext,
@@ -57,8 +60,8 @@ export function reflectUniforms(
  */
 export function createWebGLProgram(
   gl: WebGL2RenderingContext,
-  vertexRoot: Root,
-  fragmentRoot: Root,
+  vertexRoot: VertexRoot,
+  fragmentRoot: FragmentRoot,
 ): { program: WebGLProgram; set: Setter } {
   const program = gl.createProgram();
   if (!program) throw new Error("[RMSL] Could not create a program object.");
