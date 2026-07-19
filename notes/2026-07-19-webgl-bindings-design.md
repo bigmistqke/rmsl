@@ -167,7 +167,17 @@ Keyed on rmsl's `ShaderType` (`src/rmsl.ts:4-12`), excluding `void`.
 | `mat4` | `uniformMatrix4fv` | `[Mat<16>]` |
 | `sampler2D`, `samplerCube` | `uniform1i` | `[number]` (texture unit) |
 
-`Mat<N> = Float32Array | Tuple<N, number>`, a single argument.
+`Mat<N> = Float32Array | Tuple<N, number>`, a single argument, where `Tuple` is
+built recursively so the length is checked at compile time:
+
+```ts
+type Tuple<N extends number, T, R extends T[] = []> =
+  R["length"] extends N ? R : Tuple<N, T, [...R, T]>
+```
+
+The cost is a long error message when a `mat4` literal is the wrong length —
+accepted, because the alternative is view.gl's phantom `Size`, which checks
+nothing.
 
 The table is an explicit object literal, not derived by string-munging the type
 name. view.gl derives it (`kindToUniformFnName`) and that is the direct cause of
@@ -325,8 +335,27 @@ behaviour is checked by observation, not by mocking:
 5. ~~What shape do array uniforms take on the node?~~ Resolved: `uniformArray`
    on `apps/breakout` returns a distinct `UniformArrayNode<A>`, so `set` gets a
    second overload. See above.
-6. Which base does slice 1 build on? Array support lives on `apps/breakout`,
-   which is not an ancestor of this worktree's base
-   (`fix/compiler-codegen-bugs`). Either slice 1 ships scalar-only and grows the
-   array overload when that branch lands, or this worktree rebases onto it and
-   inherits unmerged demo work.
+6. ~~Which base does slice 1 build on?~~ Resolved: stay on
+   `fix/compiler-codegen-bugs`, ship scalar-only, add the array overload when
+   `apps/breakout` lands. See below.
+
+## Sequencing against the array work
+
+`apps/breakout` has diverged from this worktree's base rather than branching off
+it, and cherry-picking was tried and rejected: `d861d41` conflicts on
+`src/rmsl.ts` on contact, and it is the WIP commit where `uniformArray` starts —
+tangled with the breakout renderer — so the two clean commits after it cannot be
+taken on their own.
+
+Forcing it would also fork a feature that is being actively written elsewhere,
+leaving two copies of `uniformArray` to drift apart in the file both branches
+touch most.
+
+Slice 1 therefore ships scalar-only. What arrays add later is bounded and known:
+
+- a second `set` overload (above),
+- stripping a trailing `[0]` in the reflect loop,
+- an optional length cross-check against `getActiveUniform`'s reported `size`.
+
+Nothing about scalar `set`, `UniformArgs` or `createWebGLProgram` changes shape.
+The only thing deferred is an end-to-end array test.
