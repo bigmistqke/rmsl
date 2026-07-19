@@ -12,7 +12,6 @@
 
 - Design spec: `notes/2026-07-19-webgl-bindings-design.md`. Read it first.
 - **Target is WebGL2 only.** Type every context as `WebGL2RenderingContext`, never a union with `WebGLRenderingContext`.
-- **`src/webgl/uniforms.ts` must have no runtime imports.** Every import from `../rmsl` must be `import type`. Task 5 transpiles this file standalone and injects it into a browser page; a runtime import breaks that.
 - Scalar uniforms only. `uniformArray` lives on the unmerged `apps/breakout`; the array overload is deliberate follow-up work.
 - Never write `Co-Authored-By:` or `Claude-Session:` trailers in commit messages.
 - Design docs and plans go in `notes/`, never `docs/` — `docs/` is user-facing.
@@ -23,13 +22,14 @@
 
 | File | Responsibility |
 | --- | --- |
-| `src/webgl/uniforms.ts` | Argument-type tables, the GL dispatch table, `createUniformSetter`. No runtime imports. |
-| `src/webgl/program.ts` | `reflectUniforms`, `createWebGLProgram`. Imports `compileGLSL` at runtime. |
+| `src/webgl/uniforms.ts` | Argument-type tables, the GL dispatch table, `createUniformSetter`. |
+| `src/webgl/program.ts` | `reflectUniforms`, `createWebGLProgram`. |
 | `src/webgl/index.ts` | Public entry point; re-exports only. |
 | `src/webgl/uniforms.test.ts` | Dispatch verified against a recording stub. |
 | `src/webgl/uniforms.test-d.ts` | Type-level tests, positive and negative. |
 | `src/webgl/program.test.ts` | Reflection and link behaviour against a stub. |
-| `src/webgl/webgl.gpu.test.ts` | One end-to-end test in a real WebGL2 context. |
+| `src/webgl/webgl.fixture.ts` | Runs the real API against a real context. Bundled and run inside the browser page by the test below. |
+| `src/webgl/webgl.gpu.test.ts` | Bundles the fixture, runs it in Chromium, asserts on the pixel it read back. |
 | `vite.config.ts` | Second library entry. |
 | `package.json` | `exports` map for the subpath. |
 
@@ -135,9 +135,9 @@ Create `src/webgl/uniforms.ts`:
  * to restate it. `UniformArgs` turns that type into the argument list, and the
  * dispatch table turns it into the GL call.
  *
- * This file must have no runtime imports. It is transpiled on its own and
- * injected into a browser page by the end-to-end test, where an import would
- * not resolve.
+ * Split from program.ts because the two answer different questions: this file
+ * knows what each shader type means to GL, and that one knows how a program is
+ * built and what it kept.
  */
 
 import type { ShaderType } from "../rmsl";
@@ -856,166 +856,226 @@ git commit -m "build: publish the WebGL bindings as their own entry point"
 - Consumes: `createUniformSetter` from Task 2.
 - Produces: nothing; this is the test that the seam holds.
 
-**Why this task exists:** Tasks 2 and 3 test against stubs, which cannot catch a wrong location, a uniform GLSL removed, or a call whose arguments GL rejects. This renders with a real uniform and reads the pixel back.
+**Why this task exists:** Tasks 2 and 3 test against stubs, which cannot catch a wrong location, a uniform GLSL removed, or a call whose arguments GL rejects. This one compiles an actual RMSL graph, links it, sets a uniform through the real `set`, renders, and reads the pixel back.
 
-**Constraint:** the GL context lives in a browser page and does not cross `page.evaluate`. `src/webgl/uniforms.ts` has no runtime imports, so it is transpiled on its own and injected as source. This is why the no-runtime-imports rule in Global Constraints exists.
+**How the code gets into the browser:** a `WebGL2RenderingContext` exists only inside the Playwright page and cannot be passed out through `page.evaluate`, so the code under test has to run in the page. Vite bundles the fixture in memory (`build({ build: { write: false, lib: { formats: ["iife"] } } })`), following its imports, and the resulting IIFE is evaluated in the page. Because it is a real bundle rather than a single transpiled file, the fixture can import anything — including `compileGLSL` — and the module layout is free to follow the design rather than the test.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the fixture**
+
+Create `src/webgl/webgl.fixture.ts`. This is the code that runs inside the
+browser page — it uses the real API from end to end, and returns only numbers,
+which is all that can cross back out.
+
+```ts
+/**
+ * Drives the real API against a real context, from inside a browser page.
+ *
+ * Bundled and evaluated by webgl.gpu.test.ts. It lives in its own file rather
+ * than as a string in the test because it is ordinary code that should be
+ * type-checked and readable, and because a bundle can follow its imports —
+ * which is what lets it call the actual compiler and the actual setter rather
+ * than a hand-written stand-in.
+ *
+ * Only numbers are returned: a WebGL context cannot be passed out of the page.
+ */
+
+import { Fn, attribute, uniform, vec4 } from "../rmsl";
+import { createWebGLProgram } from "./index";
+
+/**
+ * Renders one pixel whose colour is a uniform, and reads it back.
+ *
+ * Returns the RGB that arrived. If the uniform reached the shader, it matches
+ * what was set — which is the one thing a recording stub cannot establish.
+ */
+export function probeUniform(): number[] {
+  const position = attribute("vec2");
+  const colour = uniform("vec3");
+
+  const vertexMain = Fn(() => vec4(position.x, position.y, 0.0, 1.0));
+  const fragmentMain = Fn(() => vec4(colour.x, colour.y, colour.z, 1.0));
+
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2");
+  if (!gl) throw new Error("WebGL2 unavailable in the test browser");
+  if (!gl.getExtension("EXT_color_buffer_float")) {
+    throw new Error("EXT_color_buffer_float unavailable; cannot read a float back");
+  }
+
+  // Rendering to a float texture rather than the canvas, so the value read
+  // back is the one that was set rather than an 8-bit rounding of it.
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0,
+  );
+
+  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+  gl.useProgram(program);
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW,
+  );
+  const location = gl.getAttribLocation(program, position.name);
+  gl.enableVertexAttribArray(location);
+  gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0);
+
+  set(colour, 0.25, 0.5, 0.75);
+
+  gl.viewport(0, 0, 1, 1);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  const out = new Float32Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, out);
+  return [out[0]!, out[1]!, out[2]!];
+}
+
+/**
+ * Sets a uniform the shader does not use.
+ *
+ * GLSL removes a uniform whose value cannot reach the output, so this is the
+ * ordinary case rather than a mistake. Returns the number of warnings seen,
+ * which must be one however many times it is set.
+ */
+export function probeEliminated(): number {
+  const position = attribute("vec2");
+  const unused = uniform("float");
+
+  const vertexMain = Fn(() => vec4(position.x, position.y, 0.0, 1.0));
+  const fragmentMain = Fn(() => vec4(1.0, 0.0, 0.0, 1.0));
+
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2");
+  if (!gl) throw new Error("WebGL2 unavailable in the test browser");
+
+  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+  gl.useProgram(program);
+
+  let warnings = 0;
+  const original = console.warn;
+  console.warn = () => { warnings += 1; };
+  try {
+    set(unused, 1);
+    set(unused, 2);
+    set(unused, 3);
+  } finally {
+    console.warn = original;
+  }
+  return warnings;
+}
+```
+
+- [ ] **Step 2: Write the test that bundles and runs it**
 
 Create `src/webgl/webgl.gpu.test.ts`:
 
 ```ts
 /**
- * Runs the setter against a real WebGL2 context.
+ * Runs the bindings against a real WebGL2 context.
  *
- * uniforms.test.ts records which call a type produces, which a wrong location
- * or a rejected argument would both survive — the recorder accepts anything.
- * So one program is built here, a uniform is set, and the pixel it produces is
- * read back. If the value arrives, the location was right and GL accepted it.
+ * uniforms.test.ts records which call each type produces, which a wrong
+ * location or an argument GL rejects would both survive — a recorder accepts
+ * anything. So the whole path runs here instead: an RMSL graph is compiled,
+ * linked, reflected, set and rendered, and the pixel is read back.
  *
- * The context only exists inside the page, and a WebGL2RenderingContext cannot
- * be passed out of page.evaluate. The setter is transpiled on its own and
- * injected as source instead, which works because it has no runtime imports.
+ * The context only exists inside the page and cannot be passed out, so the
+ * fixture is bundled and evaluated there. Bundling rather than transpiling one
+ * file is what lets the fixture use the real compiler and the real setter.
  */
 
 import { describe, it, expect, afterAll } from "vitest";
-import { readFile } from "node:fs/promises";
-import { transformWithEsbuild } from "vite";
+import { build } from "vite";
 
 declare const process: { env: Record<string, string | undefined> };
 
 const SKIPPED = !!process.env.RMSL_SKIP_GPU || !!process.env.RMSL_SKIP_SHADER_EVALUATION;
 
 let browser: any;
+let bundled: string | undefined;
 
 afterAll(async () => {
   await browser?.close();
 });
 
-/** The setter module as plain JS, ready to inject into a page. */
-async function setterSource(): Promise<string> {
-  const path = new URL("./uniforms.ts", import.meta.url).pathname;
-  const source = await readFile(path, "utf8");
-  // CommonJS rather than ESM: the page has no module loader, and this form
-  // hands its exports to a plain function call. The type-only import of
-  // ShaderType is erased by the transform, which is what lets this file be
-  // taken on its own at all.
-  const { code } = await transformWithEsbuild(source, path, { format: "cjs" });
-  return code;
+/** The fixture and everything it imports, as one script for the page. */
+async function fixtureBundle(): Promise<string> {
+  if (bundled) return bundled;
+  const result: any = await build({
+    logLevel: "silent",
+    build: {
+      write: false,
+      lib: {
+        entry: new URL("./webgl.fixture.ts", import.meta.url).pathname,
+        formats: ["iife"],
+        name: "RMSLFixture",
+        fileName: () => "fixture.js",
+      },
+    },
+  });
+  bundled = result[0].output[0].code;
+  return bundled!;
 }
 
-describe.skipIf(SKIPPED)("a uniform set against a real context", () => {
-  it("arrives at the shader", async () => {
-    const { chromium } = await import("playwright");
-    browser ??= await chromium.launch({
-      args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"],
-    });
-    const page = await browser.newPage();
-    try {
-      await page.goto("about:blank");
-      const read = await page.evaluate(
-        ({ setter, name }: { setter: string; name: string }) => {
-          const gl = document.createElement("canvas").getContext("webgl2")!;
-          if (!gl.getExtension("EXT_color_buffer_float")) {
-            throw new Error("EXT_color_buffer_float unavailable; cannot read a float back");
-          }
+async function runInPage(call: string): Promise<any> {
+  const { chromium } = await import("playwright");
+  browser ??= await chromium.launch({
+    args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  const page = await browser.newPage();
+  try {
+    await page.goto("about:blank");
+    return await page.evaluate(
+      ({ code, expression }: { code: string; expression: string }) =>
+        new Function(`${code}; return RMSLFixture.${expression};`)(),
+      { code: await fixtureBundle(), expression: call },
+    );
+  } finally {
+    await page.close();
+  }
+}
 
-          // Written inline rather than imported: the bundler renames functions
-          // and adds a shim that does not exist in the page.
-          const texture = gl.createTexture();
-          gl.bindTexture(gl.TEXTURE_2D, texture);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
-          const framebuffer = gl.createFramebuffer();
-          gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-          gl.framebufferTexture2D(
-            gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0,
-          );
+describe.skipIf(SKIPPED)("against a real context", () => {
+  it("delivers a uniform to the shader", async () => {
+    const [r, g, b] = await runInPage("probeUniform()");
+    expect(r).toBeCloseTo(0.25, 5);
+    expect(g).toBeCloseTo(0.5, 5);
+    expect(b).toBeCloseTo(0.75, 5);
+  }, 120_000);
 
-          const program = gl.createProgram()!;
-          for (const [src, stage] of [
-            [`#version 300 es\nin vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`,
-              gl.VERTEX_SHADER],
-            [`#version 300 es\nprecision highp float;\nuniform vec3 ${name};\n`
-              + `layout(location=0) out vec4 result;\n`
-              + `void main(){ result = vec4(${name}, 1.0); }`,
-              gl.FRAGMENT_SHADER],
-          ] as [string, number][]) {
-            const shader = gl.createShader(stage)!;
-            gl.shaderSource(shader, src);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-              throw new Error(gl.getShaderInfoLog(shader) ?? "shader failed to compile");
-            }
-            gl.attachShader(program, shader);
-          }
-          gl.linkProgram(program);
-          if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            throw new Error(gl.getProgramInfoLog(program) ?? "program failed to link");
-          }
-          gl.useProgram(program);
-
-          const buffer = gl.createBuffer();
-          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-          gl.bufferData(
-            gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW,
-          );
-          const attribute = gl.getAttribLocation(program, "p");
-          gl.enableVertexAttribArray(attribute);
-          gl.vertexAttribPointer(attribute, 2, gl.FLOAT, false, 0, 0);
-
-          // The module under test, evaluated in the page. esbuild's CommonJS
-          // output assigns to module.exports rather than mutating the exports
-          // object, so the result is read back off module.
-          const mod: any = { exports: {} };
-          new Function("exports", "module", setter)(mod.exports, mod);
-
-          const locations = new Map<string, WebGLUniformLocation>();
-          const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-          for (let index = 0; index < count; index++) {
-            const active = gl.getActiveUniform(program, index)!;
-            locations.set(active.name, gl.getUniformLocation(program, active.name)!);
-          }
-
-          const set = mod.exports.createUniformSetter(gl, locations);
-          set({ name, _t: "vec3" }, 0.25, 0.5, 0.75);
-
-          gl.viewport(0, 0, 1, 1);
-          gl.drawArrays(gl.TRIANGLES, 0, 3);
-          const out = new Float32Array(4);
-          gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, out);
-          return [out[0], out[1], out[2]];
-        },
-        { setter: await setterSource(), name: "u_probe" },
-      );
-
-      expect(read[0]).toBeCloseTo(0.25, 5);
-      expect(read[1]).toBeCloseTo(0.5, 5);
-      expect(read[2]).toBeCloseTo(0.75, 5);
-    } finally {
-      await page.close();
-    }
-  }, 60_000);
+  // The stub test asserts this too, but only here is the uniform genuinely
+  // absent — removed by the real GLSL compiler rather than left out of a map.
+  it("warns once for a uniform GLSL removed, however often it is set", async () => {
+    expect(await runInPage("probeEliminated()")).toBe(1);
+  }, 120_000);
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails for the right reason**
+- [ ] **Step 3: Run it, and confirm it is genuinely checking**
 
 Run: `pnpm vitest run src/webgl/webgl.gpu.test.ts`
+Expected: PASS, 2 tests.
 
-If it fails on injection or transpilation, fix that before continuing — a green result here must mean the value reached the shader. Confirm the test is genuinely checking by changing `set(...)` to `0.9, 0.9, 0.9` and seeing it fail, then change it back.
+If it fails while bundling or evaluating, fix that first — a green result must
+mean the value reached the shader, not that the assertion never ran.
 
-- [ ] **Step 3: Verify it passes, and that it skips when asked**
+Then confirm the first test can fail: change `set(colour, 0.25, 0.5, 0.75)` in
+the fixture to `set(colour, 0.9, 0.9, 0.9)`, re-run, see it fail on the
+expected values, and change it back.
 
-Run: `pnpm vitest run src/webgl/webgl.gpu.test.ts`
-Expected: PASS, 1 test.
+- [ ] **Step 4: Confirm it skips when asked**
 
 Run: `RMSL_SKIP_GPU=1 pnpm vitest run src/webgl/webgl.gpu.test.ts`
-Expected: 1 skipped, 0 failed.
+Expected: 2 skipped, 0 failed.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/webgl/webgl.gpu.test.ts
+git add src/webgl/webgl.fixture.ts src/webgl/webgl.gpu.test.ts
 git commit -m "test: prove a uniform reaches the shader, not just the right call"
 ```
 
