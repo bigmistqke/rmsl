@@ -224,8 +224,8 @@ git commit -m "feat: describe what each uniform type expects to be written with"
 **Interfaces:**
 - Consumes: `UniformArgs`, `SettableType` from Task 1.
 - Produces:
-  - `type SetUniform = <A extends SettableType>(node: UniformNode<A>, ...args: UniformArgs[A]) => void`
-  - `createUniformSetter(gl: WebGL2RenderingContext, locations: Map<string, WebGLUniformLocation>): SetUniform`
+  - `type Set = <A extends SettableType>(node: UniformNode<A>, ...args: UniformArgs[A]) => void`
+  - `createUniformSetter(gl: WebGL2RenderingContext, locations: Map<string, WebGLUniformLocation>): Set`
 
 - [ ] **Step 1: Write the failing dispatch test**
 
@@ -397,7 +397,7 @@ import type { ShaderType, UniformNode } from "../rmsl";
 Then append the rest to the end of the file:
 
 ```ts
-/** Writes one already-located uniform. Arguments are checked by `SetUniform`. */
+/** Writes one already-located uniform. Arguments are checked by `Set`. */
 type Writer = (
   gl: WebGL2RenderingContext,
   location: WebGLUniformLocation,
@@ -441,15 +441,21 @@ const WRITERS: Record<SettableType, Writer> = {
 };
 
 /**
- * Writes a uniform, taking the node itself rather than a name.
+ * Writes a shader input, taking the node itself rather than a name.
  *
- * The type comes from the node twice over, through two separate channels, and
- * the split is deliberate. `A` is recovered from `UniformNode<A>` through the
- * brand on `BaseNode`, which is what makes the argument list resolve. `_t`
- * holds the same type as a plain string — it is declared `string`, not `A`, so
- * it cannot drive the types — and is read only to pick the call.
+ * One function rather than one per kind. `UniformNode` narrows `type` to
+ * "uniform", so slice 2 adds an attribute overload here and each kind gets the
+ * arguments that suit it — components for a uniform, a buffer for an attribute
+ * — without the caller choosing a different function.
+ *
+ * The shader type comes from the node twice over, through two separate
+ * channels, and the split is deliberate. `A` is recovered from
+ * `UniformNode<A>` through the brand on `BaseNode`, which is what makes the
+ * argument list resolve. `_t` holds the same type as a plain string — declared
+ * `string`, not `A`, so it cannot drive the types — and is read only to pick
+ * the call.
  */
-export type SetUniform = <A extends SettableType>(
+export type Set = <A extends SettableType>(
   node: UniformNode<A>,
   ...args: UniformArgs[A]
 ) => void;
@@ -457,7 +463,7 @@ export type SetUniform = <A extends SettableType>(
 export function createUniformSetter(
   gl: WebGL2RenderingContext,
   locations: Map<string, WebGLUniformLocation>,
-): SetUniform {
+): Set {
   // A render loop calls set() every frame, so an unreachable uniform would
   // otherwise report itself thousands of times a second.
   const reported = new Set<string>();
@@ -524,14 +530,21 @@ describe("inference from the node", () => {
     set(uniform("mat4"), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
+  // The three variable node types used to be aliases of one another, so this
+  // was accepted. They now narrow `type` to the string each constructor
+  // writes, which is what lets one `set` take a uniform and later an
+  // attribute and give each its own arguments.
   it("rejects a node that is not a uniform", () => {
-    // @ts-expect-error a varying is not something the host writes
+    // @ts-expect-error an attribute is written with a buffer, not components
+    set(attribute("vec3"), 1, 2, 3);
+    // @ts-expect-error a varying is written by the shader, not by the host
     set(varying("float"), 1);
   });
 });
 ```
 
-Add `varying` to the existing `../rmsl` import at the top of the file.
+Add `attribute` and `varying` to the existing `../rmsl` import at the top of
+the file.
 
 - [ ] **Step 6: Run both suites**
 
@@ -554,10 +567,10 @@ git commit -m "feat: write a uniform by handing over the node that declared it"
 - Test: `src/webgl/program.test.ts`
 
 **Interfaces:**
-- Consumes: `createUniformSetter`, `SetUniform` from Task 2; `compileGLSL`, `Node`, `ShaderType` from `../rmsl`.
+- Consumes: `createUniformSetter`, `Set` from Task 2; `compileGLSL`, `Node`, `ShaderType` from `../rmsl`.
 - Produces:
   - `reflectUniforms(gl, program): Map<string, WebGLUniformLocation>`
-  - `createWebGLProgram(gl, vertexRoot, fragmentRoot): { program: WebGLProgram; set: SetUniform }`
+  - `createWebGLProgram(gl, vertexRoot, fragmentRoot): { program: WebGLProgram; set: Set }`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -645,7 +658,7 @@ Create `src/webgl/program.ts`:
  */
 
 import { compileGLSL, type Node, type ShaderType } from "../rmsl";
-import { createUniformSetter, type SetUniform } from "./uniforms";
+import { createUniformSetter, type Set } from "./uniforms";
 
 type Root = Node<ShaderType> | Node<ShaderType>[];
 
@@ -696,7 +709,7 @@ export function createWebGLProgram(
   gl: WebGL2RenderingContext,
   vertexRoot: Root,
   fragmentRoot: Root,
-): { program: WebGLProgram; set: SetUniform } {
+): { program: WebGLProgram; set: Set } {
   const program = gl.createProgram();
   if (!program) throw new Error("[RMSL] Could not create a program object.");
 
@@ -767,7 +780,7 @@ Create `src/webgl/index.ts`:
  */
 
 export { createWebGLProgram, reflectUniforms } from "./program";
-export type { SetUniform, UniformArgs, SettableType, Mat, Tuple } from "./uniforms";
+export type { Set, UniformArgs, SettableType, Mat, Tuple } from "./uniforms";
 ```
 
 - [ ] **Step 2: Add the build entry**

@@ -46,6 +46,40 @@ breakage.
 names shift with evaluation order and are never a stable contract. They are used
 solely as the join key against `getUniformLocation` / `getAttribLocation`.
 
+### One `set`, and the upstream change that allows it
+
+`UniformNode`, `AttributeNode` and `VaryingNode` were aliases of
+`VariableNode<A>` — one type wearing three names. Nothing could tell them
+apart, so a setter meant for uniforms accepted an attribute or a varying
+silently, and the mistake surfaced only as a lookup that found nothing.
+
+The discriminant was there at runtime the whole time: each constructor writes
+`type: "uniform"` / `"attribute"` / `"varying"`. Only the declaration was
+vague, saying `string`. Narrowing each alias to the literal its constructor
+already writes makes the type honest, and costs three lines:
+
+```ts
+export type UniformNode<A extends ShaderType> = VariableNode<A> & { readonly type: "uniform" };
+export type AttributeNode<A extends ShaderType> = VariableNode<A> & { readonly type: "attribute" };
+export type VaryingNode<A extends ShaderType> = VariableNode<A> & { readonly type: "varying" };
+```
+
+That buys a single `set` whose arguments follow the kind of node handed to it,
+rather than one function per kind:
+
+```ts
+set(uColour, 1, 0, 0)                  // uniform: components
+set(quadPos, buffer, "DYNAMIC_DRAW")   // attribute: a buffer  (slice 2)
+
+set(uColour, buffer)                   // rejected
+set(quadPos, 1, 0)                     // rejected
+set(vNormal, 1, 2, 3)                  // rejected: written by the shader
+```
+
+Verified against the existing suite: `type-check` clean, 172 passed / 18
+skipped unchanged, 13 type tests pass, and `apps/infinite-grid` type-checks
+against the built `dist`. Landed ahead of the slice as its own commit.
+
 ### Why there is no schema
 
 An earlier iteration had the caller pass a manifest mapping names to nodes.
