@@ -5,7 +5,7 @@ RMSL compiles node graphs to **GLSL** (WebGL 2 / OpenGL ES 3.0), **WGSL** (WebGP
 ## Compiler API
 
 ```typescript
-import { compileGLSL, compileWGSL } from "rmsl";
+import { compileGLSL, compileWGSL } from "@random-mesh/rmsl";
 ```
 
 ### Fragment shader (default)
@@ -156,7 +156,7 @@ struct VertexInput {
 For use with Three.js `glslFn`/`wgslFn` or other embedding scenarios, RMSL provides `compileGLSLFn` and `compileWGSLFn` to compile individual functions with custom names and parameters:
 
 ```typescript
-import { compileGLSLFn, compileWGSLFn, float, var_ } from "rmsl";
+import { compileGLSLFn, compileWGSLFn, float, var_ } from "@random-mesh/rmsl";
 
 let glsl = compileGLSLFn(
   (a, b) => a.add(b).sin(),
@@ -210,7 +210,7 @@ feed the per-pixel varyings and uniforms into the compiled function and read
 the colour/depth back, with no GPU round-trip.
 
 ```typescript
-import { compileJS, compileJSFn, Fn, uniform, output, builtinFragDepth } from "rmsl";
+import { compileJS, compileJSFn, Fn, uniform, output, builtinFragDepth } from "@random-mesh/rmsl";
 
 let pickFn = compileJS(calcColourAndDepth, { name: "pick", params: [] });
 // On pointerdown:

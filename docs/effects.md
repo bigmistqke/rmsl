@@ -59,7 +59,7 @@ These take an input color node or a sampler and return the output color:
 Textures are declared by the caller and passed in:
 
 ```typescript
-import { Fn, uniform, compileGLSL } from "rmsl";
+import { Fn, uniform, compileGLSL } from "@random-mesh/rmsl";
 import { fxaa } from "@random-mesh/rmsl/effects";
 
 let colorTex = uniform("sampler2D");

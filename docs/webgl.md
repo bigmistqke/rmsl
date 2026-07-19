@@ -7,8 +7,8 @@ The idea: `uniform("vec3")` gives you a node that already knows its shader type
 and has its own unique name. So writing it needs neither.
 
 ```typescript
-import { uniform, Fn, vec4 } from "rmsl";
-import { createWebGLProgram } from "rmsl/webgl";
+import { uniform, Fn, vec4 } from "@random-mesh/rmsl";
+import { createWebGLProgram } from "@random-mesh/rmsl/webgl";
 
 let colour = uniform("vec3");
 

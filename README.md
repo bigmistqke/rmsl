@@ -6,7 +6,7 @@
 A TypeScript DSL for building shader programs. Define a node graph in TypeScript and compile it to **GLSL** (WebGL 2), **WGSL** (WebGPU), or **JavaScript** (a CPU callable for screen picking and other per-pixel host-side work).
 
 ```typescript
-import { Fn, float, vec4, uniform, compileGLSL, compileWGSL, compileJS } from "rmsl";
+import { Fn, float, vec4, uniform, compileGLSL, compileWGSL, compileJS } from "@random-mesh/rmsl";
 
 let prog = Fn(() => {
   let color = uniform("vec4");
@@ -43,8 +43,8 @@ declared them, so a `set` call is checked against the shader type it is
 writing rather than against a name and a value the caller restates by hand.
 
 ```typescript
-import { uniform, uniformArray } from "rmsl";
-import { createWebGLProgram } from "rmsl/webgl";
+import { uniform, uniformArray } from "@random-mesh/rmsl";
+import { createWebGLProgram } from "@random-mesh/rmsl/webgl";
 
 let colour = uniform("vec3");
 let mvp = uniform("mat4");

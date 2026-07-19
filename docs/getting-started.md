@@ -5,13 +5,13 @@ RMSL (Random Mesh Shading Language) is a TypeScript DSL for building shader prog
 ## Installation
 
 ```bash
-pnpm add rmsl
+pnpm add @random-mesh/rmsl
 ```
 
 ## Hello World
 
 ```typescript
-import { Fn, float, compileGLSL } from "rmsl";
+import { Fn, float, compileGLSL } from "@random-mesh/rmsl";
 
 let prog = Fn(() => {
   let x = float(1.5).toVar();
@@ -45,7 +45,7 @@ void main(void) {
 ## Compiling to WebGPU (WGSL)
 
 ```typescript
-import { compileWGSL } from "rmsl";
+import { compileWGSL } from "@random-mesh/rmsl";
 
 let wgsl = compileWGSL(prog());
 ```
@@ -56,7 +56,7 @@ Compiling gives you source. To put it on screen, `rmsl/webgl` links a program
 and writes its uniforms through the nodes that declared them:
 
 ```typescript
-import { createWebGLProgram } from "rmsl/webgl";
+import { createWebGLProgram } from "@random-mesh/rmsl/webgl";
 
 let { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
 
