@@ -36,6 +36,31 @@ let js = compileJS(() => prog());   // fn(ctx) -> color, run on the CPU
 - **Vertex/fragment** - Separate vertex and fragment compilation with proper I/O
 - **Built-in outputs** - `output()`, `builtinPosition()`, `varying()`, `attribute()`, `uniform()`
 
+## WebGL bindings
+
+`rmsl/webgl` sets a compiled program's uniforms through the nodes that
+declared them, so a `set` call is checked against the shader type it is
+writing rather than against a name and a value the caller restates by hand.
+
+```typescript
+import { uniform } from "rmsl";
+import { createWebGLProgram } from "rmsl/webgl";
+
+let uTime = uniform("float");
+let uView = uniform("mat4");
+
+let { program, set } = createWebGLProgram(gl, vertexRoot, fragmentRoot);
+
+gl.useProgram(program);
+set(uTime, 0.5);
+set(uView, matrix);
+```
+
+WebGL2 only — RMSL compiles to GLSL ES 3.0, which WebGL1 cannot load. The
+caller binds the program (`gl.useProgram`) before calling `set`; binding is
+not done implicitly on every call. Uniforms are the current scope; attributes
+and varyings are not yet covered.
+
 ## Documentation
 
 - [Getting Started](https://github.com/big-mesh-studios/rmsl/blob/main/docs/getting-started.md) - Quick setup and hello world
