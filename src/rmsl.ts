@@ -56,7 +56,12 @@ export type VariableNode<A extends ShaderType> = Node<A> & {
 
 // Aliases rather than interfaces: `Node<A>` resolves through an indexed access,
 // and an interface may only extend a type whose members are statically known.
-export type UniformNode<A extends ShaderType> = VariableNode<A>;
+//
+// Each narrows `type` to the string its constructor already writes. Without
+// that the three are one type to the checker, so nothing could tell a uniform
+// from an attribute — which a host binding has to do, since the two are read
+// and written in entirely different ways.
+export type UniformNode<A extends ShaderType> = VariableNode<A> & { readonly type: "uniform" };
 
 /**
  * A uniform array. Not a `Node<A>` itself — the array as a whole has no value,
@@ -68,8 +73,8 @@ export interface UniformArrayNode<A extends ShaderType> {
   readonly length: number;
   element(index: IntLike | FloatLike): Node<A>;
 }
-export type AttributeNode<A extends ShaderType> = VariableNode<A>;
-export type VaryingNode<A extends ShaderType> = VariableNode<A>;
+export type AttributeNode<A extends ShaderType> = VariableNode<A> & { readonly type: "attribute" };
+export type VaryingNode<A extends ShaderType> = VariableNode<A> & { readonly type: "varying" };
 
 // === Type guards for node type checking ===
 export function isUniformNode<T extends ShaderType>(node: Node<T> | VariableNode<T>): node is UniformNode<T> {
