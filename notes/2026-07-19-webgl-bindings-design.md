@@ -64,14 +64,47 @@ layouts pass it — how bytes are packed into a buffer exists nowhere else.
 | Dropped | Reason |
 | --- | --- |
 | `toID` symbol aliasing, `SYMBOL_MAP`, Firefox `WeakMap`-symbol workaround | Nodes are already unique; the problem this solves does not exist |
-| WebGL1 support, `features.ts`, ANGLE / OES extension wrappers | rmsl emits `#version 300 es` (`src/rmsl.ts:1697`) — WebGL2 only |
-| Array uniforms (`size`, `UniformArrayMethods`, bulk vs element setters) | rmsl's `uniform()` takes no size; arrays are not expressible |
+| WebGL1 support, `features.ts`, ANGLE / OES extension wrappers | rmsl emits `#version 300 es` (`src/rmsl.ts:1697`) — WebGL2 only. **Assumption, see below** |
 | `ivec2/3/4`, `uvec2/3/4` | Absent from rmsl's `ShaderType` |
 | `sampler3D`, `sampler2DArray`, shadow samplers, `isampler*`, `usampler*` | rmsl has only `sampler2D` and `samplerCube` |
 | `ViewSchema`, `GLSLToSchema`, `MergeGLSLSchema`, `DeepMerge`/`ShallowMerge` | No schema exists to merge |
 
 Requiring WebGL2 also removes the `@ts-ignore FIX WEBGL/WEBGL2 TYPES` markers —
 they exist only because `GL` is a union that defeats indexed access.
+
+### Assumption: WebGL2 only
+
+`compileGLSLWithStage` emits `#version 300 es` unconditionally *today*, but that
+is a current property of the compiler, not a commitment. If rmsl ever gains a
+GLSL ES 1.0 backend, this entry point has to grow WebGL1 support back.
+
+Blast radius if that happens, so the cost is known up front:
+
+- `features.ts` returns — extension detection for instancing and VAOs.
+- `uint` and the six non-square matrix kinds lose their setters
+  (`uniform1ui`, `uniformMatrix2x3fv` and friends are WebGL2-only), so
+  `UniformArgs` needs to become version-aware or those kinds must throw.
+- `GL` becomes a union again, and indexed access into it stops type-checking —
+  the thing view.gl papers over with `@ts-ignore`.
+
+The design does not try to anticipate this. It takes a hard dependency on
+`WebGL2RenderingContext` and states it, so a future GLSL ES 1.0 backend arrives
+as a deliberate piece of work rather than a surprise.
+
+### Array uniforms
+
+In progress in the compiler at time of writing, so this entry point must not
+design them out.
+
+`UniformArgs` stays keyed on the element type; array-ness is a separate axis. A
+node representing `vec3[8]` should reach a bulk setter typed against the element
+type and a length, rather than being modelled as its own kind. The concrete
+shape is deferred until the compiler side settles — the requirement here is that
+adding it must not force `UniformArgs` or `set` to be restructured.
+
+Two things from view.gl to avoid when it lands: the phantom `TSize` that makes
+`UniformArrayMethods` index-unchecked, and the sampler branch that returns a
+scalar setter for something typed as an array (issue #2, items 1 and 3).
 
 ### Kept
 
@@ -254,3 +287,7 @@ behaviour is checked by observation, not by mocking:
    unknown uniform only warns? Or should both warn?
 4. Are textures wanted at all in the first pass, or is slice 4 deferred
    indefinitely until something needs it?
+5. What shape do array uniforms take on the node once the compiler supports
+   them — `uniform("vec3", 8)` returning a distinct node type, or a length
+   carried on the existing `UniformNode`? This decides whether `set` needs an
+   overload or just a wider argument type.
