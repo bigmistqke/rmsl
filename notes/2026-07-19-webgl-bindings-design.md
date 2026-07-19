@@ -244,6 +244,30 @@ consecutive locations. view.gl permits the kind and emits a single location with
 size 16, which silently exceeds the 4-component limit. Until this is
 implemented, `set` on a matrix attribute throws with a message saying so.
 
+## Open for the project, not for this slice
+
+**Module resolution.** The published declarations name their relative imports
+with a `.js` extension, because without one they do not resolve under
+TypeScript's `node16` / `nodenext` resolution — and with `skipLibCheck: true`,
+which most consumers set, that failure is silent: no error, every type in the
+entry point quietly becomes `any`.
+
+This project resolves modules the way a bundler does, which accepts an import
+with no extension. So the convention holds today but nothing enforces it: one
+extensionless import would type-check, test and build without complaint, and
+the breakage would only appear in someone else's project.
+
+The proper fix is for the project to adopt `nodenext` resolution itself, which
+enforces the rule everywhere rather than for one directory. That is a decision
+about the whole codebase — it would require an extension on every relative
+import in `src/` — so it belongs to a separate discussion rather than to this
+slice.
+
+A stopgap was tried and backed out: a second tsconfig checking only the
+published sources under `node16`, wired into `type-check`. It works and reports
+the error at the offending import, but it solves for one directory a question
+the project should answer once.
+
 ## Bugs found in view.gl — fix, do not port
 
 Latent but currently masked:
