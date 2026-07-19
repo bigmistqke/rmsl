@@ -1,4 +1,4 @@
-import { compileGLSL } from "@random-mesh/rmsl";
+import { createWebGLProgram } from "@random-mesh/rmsl/webgl";
 import {
   vertexMain, calcColourAndDepth,
   quadPos, cameraProjectionMatrix, cameraViewMatrix,
@@ -6,10 +6,6 @@ import {
   quadVerts,
   mat4Perspective, mat4LookAt, mat4Inverse,
 } from "../../shared/shader";
-
-// === Compile shaders ===
-let vsGLSL = compileGLSL.vertex(vertexMain());
-let fsGLSL = compileGLSL.fragment(calcColourAndDepth());
 
 // === Orbital camera state ===
 let theta = 0;
@@ -52,27 +48,7 @@ if (!gl) {
   throw new Error("WebGL2 not supported");
 }
 
-function compileShader(src: string, type: number): WebGLShader {
-  let s = gl.createShader(type)!;
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    console.error(gl.getShaderInfoLog(s));
-    throw new Error("Shader compile error");
-  }
-  return s;
-}
-
-let vs = compileShader(vsGLSL, gl.VERTEX_SHADER);
-let fs = compileShader(fsGLSL, gl.FRAGMENT_SHADER);
-let program = gl.createProgram()!;
-gl.attachShader(program, vs);
-gl.attachShader(program, fs);
-gl.linkProgram(program);
-if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-  console.error(gl.getProgramInfoLog(program));
-  throw new Error("Program link error");
-}
+let { program, set } = createWebGLProgram(gl, vertexMain(), calcColourAndDepth());
 gl.useProgram(program);
 
 // Full-screen quad VBO
@@ -84,15 +60,6 @@ gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
 let attrLoc = gl.getAttribLocation(program, quadPos.name);
 gl.enableVertexAttribArray(attrLoc);
 gl.vertexAttribPointer(attrLoc, 2, gl.FLOAT, false, 0, 0);
-
-// Uniform locations
-let uniforms = {
-  projection: gl.getUniformLocation(program, cameraProjectionMatrix.name),
-  view: gl.getUniformLocation(program, cameraViewMatrix.name),
-  projInv: gl.getUniformLocation(program, cameraProjectionMatrixInverse.name),
-  world: gl.getUniformLocation(program, cameraWorldMatrix.name),
-  camPos: gl.getUniformLocation(program, cameraPosition.name),
-};
 
 // === Pointer / wheel events ===
 canvas.addEventListener("pointerdown", (e) => {
@@ -169,11 +136,11 @@ function render() {
   let world = mat4Inverse(view);
   let camPos = getCameraPosition();
 
-  gl.uniformMatrix4fv(uniforms.projection, false, proj);
-  gl.uniformMatrix4fv(uniforms.view, false, view);
-  gl.uniformMatrix4fv(uniforms.projInv, false, projInv);
-  gl.uniformMatrix4fv(uniforms.world, false, world);
-  gl.uniform3f(uniforms.camPos, camPos[0], camPos[1], camPos[2]);
+  set(cameraProjectionMatrix, proj);
+  set(cameraViewMatrix, view);
+  set(cameraProjectionMatrixInverse, projInv);
+  set(cameraWorldMatrix, world);
+  set(cameraPosition, camPos[0], camPos[1], camPos[2]);
 
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
