@@ -93,16 +93,51 @@ as a deliberate piece of work rather than a surprise.
 
 ### Array uniforms
 
-In progress in the compiler at time of writing, so this entry point must not
-design them out.
+Landed on `apps/breakout` (`89ea271`), not yet on the base this worktree sits
+on:
 
-`UniformArgs` stays keyed on the element type; array-ness is a separate axis. A
-node representing `vec3[8]` should reach a bulk setter typed against the element
-type and a length, rather than being modelled as its own kind. The concrete
-shape is deferred until the compiler side settles — the requirement here is that
-adding it must not force `UniformArgs` or `set` to be restructured.
+```ts
+export interface UniformArrayNode<A extends ShaderType> {
+  readonly name: string;
+  readonly length: number;
+  element(index: IntLike | FloatLike): Node<A>;
+}
 
-Two things from view.gl to avoid when it lands: the phantom `TSize` that makes
+const bricks = uniformArray("vec4", 24);
+```
+
+`UniformArrayNode<A>` is deliberately **not** a `Node<A>` — the array itself has
+no operations, only its elements do. So it is a separate type, not a variant of
+`UniformNode<A>`, and `set` takes two overloads rather than one widened
+signature:
+
+```ts
+set<A>(node: UniformNode<A>, ...args: UniformArgs[A]): void
+set<A>(node: UniformArrayNode<A>, data: Float32Array | number[]): void
+```
+
+`UniformArgs` stays keyed on the element type and is reused by both — array-ness
+is an axis, not a kind. Uploading is `uniform{N}fv` / `uniformMatrix{N}fv` with
+the element type's suffix.
+
+Three things this forces:
+
+- **`getActiveUniform` reports array uniforms as `_rmsl_u3[0]`**, not
+  `_rmsl_u3`. The reflect loop must strip a trailing `[0]` or every array lookup
+  misses.
+- **Length is checkable.** `getActiveUniform` reports `size` as the array
+  length, and `UniformArrayNode` carries `length`. A mismatch means the shader
+  and the host disagree, and is worth warning about. view.gl cannot do this —
+  its `size` comes from the same declaration it would be validating.
+- **No element-wise setter for free.** `element()` returns an expression node,
+  not a handle. Bulk upload is the primary operation; `setElement(node, i, …)`
+  can follow later if wanted.
+
+The interface exposes `name` and `length` but not `_t`, though it is present at
+runtime. Runtime dispatch needs a cast, or the interface needs `_t` added
+upstream.
+
+Two things from view.gl to avoid: the phantom `TSize` that leaves
 `UniformArrayMethods` index-unchecked, and the sampler branch that returns a
 scalar setter for something typed as an array (issue #2, items 1 and 3).
 
@@ -287,7 +322,11 @@ behaviour is checked by observation, not by mocking:
    unknown uniform only warns? Or should both warn?
 4. Are textures wanted at all in the first pass, or is slice 4 deferred
    indefinitely until something needs it?
-5. What shape do array uniforms take on the node once the compiler supports
-   them — `uniform("vec3", 8)` returning a distinct node type, or a length
-   carried on the existing `UniformNode`? This decides whether `set` needs an
-   overload or just a wider argument type.
+5. ~~What shape do array uniforms take on the node?~~ Resolved: `uniformArray`
+   on `apps/breakout` returns a distinct `UniformArrayNode<A>`, so `set` gets a
+   second overload. See above.
+6. Which base does slice 1 build on? Array support lives on `apps/breakout`,
+   which is not an ancestor of this worktree's base
+   (`fix/compiler-codegen-bugs`). Either slice 1 ships scalar-only and grows the
+   array overload when that branch lands, or this worktree rebases onto it and
+   inherits unmerged demo work.
