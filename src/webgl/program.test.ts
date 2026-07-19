@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { reflectUniforms } from "./program";
+import { reflectUniforms, createWebGLProgram } from "./program";
+import { Fn, attribute, vec4 } from "../rmsl";
 
 /** A stub program exposing a fixed set of active uniforms. */
 function programWith(actives: Array<{ name: string }>) {
@@ -55,5 +56,106 @@ describe("reflectUniforms", () => {
   it("is empty for a program with no uniforms", () => {
     const { gl, program } = programWith([]);
     expect(reflectUniforms(gl, program).size).toBe(0);
+  });
+});
+
+describe("createWebGLProgram", () => {
+  /** Every GL object a stub call creates or deletes, by reference. */
+  type Log = {
+    programs: WebGLProgram[];
+    shaders: WebGLShader[];
+    deletedPrograms: WebGLProgram[];
+    deletedShaders: WebGLShader[];
+  };
+
+  /**
+   * A stub GL context whose compile/link outcome is fixed by the caller, and
+   * that records every object it creates and every delete call it receives.
+   */
+  function glStub(options: {
+    vertexCompiles: boolean;
+    fragmentCompiles: boolean;
+    linkSucceeds: boolean;
+  }): { gl: WebGL2RenderingContext; log: Log } {
+    const log: Log = { programs: [], shaders: [], deletedPrograms: [], deletedShaders: [] };
+    const stageOf = new Map<WebGLShader, number>();
+
+    const gl = {
+      VERTEX_SHADER: 0x8b31,
+      FRAGMENT_SHADER: 0x8b30,
+      COMPILE_STATUS: 0x8b81,
+      LINK_STATUS: 0x8b82,
+      createProgram: () => {
+        const program = {} as WebGLProgram;
+        log.programs.push(program);
+        return program;
+      },
+      createShader: (stage: number) => {
+        const shader = {} as WebGLShader;
+        stageOf.set(shader, stage);
+        log.shaders.push(shader);
+        return shader;
+      },
+      shaderSource: () => {},
+      compileShader: () => {},
+      getShaderParameter: (shader: WebGLShader) =>
+        stageOf.get(shader) === gl.VERTEX_SHADER ? options.vertexCompiles : options.fragmentCompiles,
+      getShaderInfoLog: (shader: WebGLShader) =>
+        stageOf.get(shader) === gl.VERTEX_SHADER ? "vertex compile failed" : "fragment compile failed",
+      deleteShader: (shader: WebGLShader) => {
+        log.deletedShaders.push(shader);
+      },
+      attachShader: () => {},
+      linkProgram: () => {},
+      getProgramParameter: () => options.linkSucceeds,
+      getProgramInfoLog: () => "link failed",
+      deleteProgram: (program: WebGLProgram) => {
+        log.deletedPrograms.push(program);
+      },
+    } as unknown as WebGL2RenderingContext;
+
+    return { gl, log };
+  }
+
+  /** A minimal valid vertex graph: an attribute forwarded to gl_Position. */
+  function vertexGraph() {
+    const pos = attribute("vec2");
+    return Fn(() => vec4(pos.x, pos.y, 0.0, 1.0))();
+  }
+
+  /** A minimal valid fragment graph: a fixed vec4 colour. */
+  function fragmentGraph() {
+    return Fn(() => vec4(1.0, 0.0, 0.0, 1.0))();
+  }
+
+  /** Every object the stub created must show up among what it deleted. */
+  function expectNothingLeaked(log: Log) {
+    expect(log.deletedPrograms).toHaveLength(log.programs.length);
+    for (const program of log.programs) expect(log.deletedPrograms).toContain(program);
+    expect(log.deletedShaders).toHaveLength(log.shaders.length);
+    for (const shader of log.shaders) expect(log.deletedShaders).toContain(shader);
+  }
+
+  it("deletes the program and shader when the vertex shader fails to compile", () => {
+    const { gl, log } = glStub({ vertexCompiles: false, fragmentCompiles: true, linkSucceeds: true });
+    expect(() => createWebGLProgram(gl, vertexGraph(), fragmentGraph())).toThrow(/vertex shader did not compile/);
+    expect(log.shaders).toHaveLength(1);
+    expectNothingLeaked(log);
+  });
+
+  // This is the path the library RMSL replaces leaks on: the program and the
+  // already-compiled vertex shader both have to be cleaned up here too.
+  it("deletes the program and both shaders when the fragment shader fails to compile", () => {
+    const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: false, linkSucceeds: true });
+    expect(() => createWebGLProgram(gl, vertexGraph(), fragmentGraph())).toThrow(/fragment shader did not compile/);
+    expect(log.shaders).toHaveLength(2);
+    expectNothingLeaked(log);
+  });
+
+  it("deletes the program and both shaders when the program fails to link", () => {
+    const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: false });
+    expect(() => createWebGLProgram(gl, vertexGraph(), fragmentGraph())).toThrow(/did not link/);
+    expect(log.shaders).toHaveLength(2);
+    expectNothingLeaked(log);
   });
 });
