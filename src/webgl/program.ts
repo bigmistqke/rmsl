@@ -8,7 +8,7 @@
  */
 
 import { compileGLSL, type Node, type ShaderType } from "../rmsl";
-import { createUniformSetter, type Set } from "./uniforms";
+import { createUniformSetter, type Setter } from "./uniforms";
 
 type Root = Node<ShaderType> | Node<ShaderType>[];
 
@@ -59,7 +59,7 @@ export function createWebGLProgram(
   gl: WebGL2RenderingContext,
   vertexRoot: Root,
   fragmentRoot: Root,
-): { program: WebGLProgram; set: Set } {
+): { program: WebGLProgram; set: Setter } {
   const program = gl.createProgram();
   if (!program) throw new Error("[RMSL] Could not create a program object.");
 

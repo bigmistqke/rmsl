@@ -70,7 +70,7 @@ export interface UniformArgs {
 /** Every shader type a host can write. `void` is the one that is excluded. */
 export type SettableType = ShaderType & keyof UniformArgs;
 
-/** Writes one already-located uniform. Arguments are checked by `Set`. */
+/** Writes one already-located uniform. Arguments are checked by `Setter`. */
 type Writer = (
   gl: WebGL2RenderingContext,
   location: WebGLUniformLocation,
@@ -128,7 +128,7 @@ const WRITERS: Record<SettableType, Writer> = {
  * `string`, not `A`, so it cannot drive the types — and is read only to pick
  * the call.
  */
-export type Set = <A extends SettableType>(
+export type Setter = <A extends SettableType>(
   node: UniformNode<A>,
   ...args: UniformArgs[A]
 ) => void;
@@ -136,7 +136,7 @@ export type Set = <A extends SettableType>(
 export function createUniformSetter(
   gl: WebGL2RenderingContext,
   locations: Map<string, WebGLUniformLocation>,
-): Set {
+): Setter {
   // A render loop calls set() every frame, so an unreachable uniform would
   // otherwise report itself thousands of times a second.
   const reported = new Set<string>();
@@ -155,6 +155,8 @@ export function createUniformSetter(
       }
       return;
     }
-    WRITERS[node._t as SettableType](gl, location, args);
+    const writer = WRITERS[node._t as SettableType];
+    if (!writer) throw new Error(`[RMSL] ${node._t} is not a uniform type that can be set.`);
+    writer(gl, location, args);
   };
 }
