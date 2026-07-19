@@ -144,3 +144,27 @@ describe("a uniform the program does not have", () => {
     warn.mockRestore();
   });
 });
+
+describe("a node whose _t has no writer", () => {
+  // _t is typed string, not the shader type, precisely so it cannot drive the
+  // argument types — which also means the dispatch table cannot trust it. A
+  // JS caller, or a cast past the type check, can hand over a node whose _t
+  // is not a key of WRITERS, and location lookup succeeding is what would
+  // otherwise let that reach `WRITERS[node._t]` and throw the opaque
+  // "undefined is not a function" instead of naming the problem.
+  it("throws naming the type rather than calling undefined", () => {
+    const { gl } = recorder();
+    const location = {} as WebGLUniformLocation;
+    // Cast past the generic: passing a node whose _t is not a real shader
+    // type gives the compiler nothing to infer A from, which is exactly the
+    // situation this guard exists for, so the call itself has to be untyped.
+    const set = createUniformSetter(gl, new Map([["bogus", location]])) as (
+      node: unknown,
+    ) => void;
+    const node = { name: "bogus", _t: "notAShaderType" };
+
+    expect(() => set(node)).toThrow(
+      "[RMSL] notAShaderType is not a uniform type that can be set.",
+    );
+  });
+});
