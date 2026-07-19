@@ -8,4 +8,12 @@
  */
 
 export { createWebGLProgram, reflectUniforms } from "./program";
-export type { Setter, UniformArgs, SettableType, Mat, Tuple } from "./uniforms";
+export type {
+  Setter,
+  UniformArgs,
+  ArrayData,
+  SettableType,
+  SettableArrayType,
+  Mat,
+  Tuple,
+} from "./uniforms";

@@ -43,23 +43,30 @@ declared them, so a `set` call is checked against the shader type it is
 writing rather than against a name and a value the caller restates by hand.
 
 ```typescript
-import { uniform } from "rmsl";
+import { uniform, uniformArray } from "rmsl";
 import { createWebGLProgram } from "rmsl/webgl";
 
-let uTime = uniform("float");
-let uView = uniform("mat4");
+let colour = uniform("vec3");
+let mvp = uniform("mat4");
+let bricks = uniformArray("vec4", 24);
 
 let { program, set } = createWebGLProgram(gl, vertexRoot, fragmentRoot);
 
 gl.useProgram(program);
-set(uTime, 0.5);
-set(uView, matrix);
+set(colour, 1, 0, 0);       // components
+set(mvp, matrix);           // one buffer
+set(bricks, positions);     // 24 × 4 numbers, in one call
 ```
 
-WebGL2 only — RMSL compiles to GLSL ES 3.0, which WebGL1 cannot load. The
-caller binds the program (`gl.useProgram`) before calling `set`; binding is
-not done implicitly on every call. Uniforms are the current scope; attributes
-and varyings are not yet covered.
+`set(colour, 1, 0)` is a compile error — the node says it is a `vec3`, so
+nothing has to be restated for that to be checked.
+
+WebGL2 only, since RMSL compiles to GLSL ES 3.0. The caller binds the program
+before setting, as with raw WebGL. Uniforms are the current scope; attributes
+and textures are still set up by hand.
+
+See [WebGL Bindings](https://github.com/big-mesh-studios/rmsl/blob/main/docs/webgl.md)
+for the full surface.
 
 ## Documentation
 
@@ -67,6 +74,7 @@ and varyings are not yet covered.
 - [API Reference](https://github.com/big-mesh-studios/rmsl/blob/main/docs/api.md) - Full type system, constructors, and operations
 - [TSL Migration](https://github.com/big-mesh-studios/rmsl/blob/main/docs/tsl-migration.md) - Porting a Three.js TSL shader to RMSL
 - [Compilation](https://github.com/big-mesh-studios/rmsl/blob/main/docs/compilation.md) - GLSL/WGSL output, type mappings, binding model
+- [WebGL Bindings](https://github.com/big-mesh-studios/rmsl/blob/main/docs/webgl.md) - Running a program and setting its uniforms (`@random-mesh/rmsl/webgl`)
 - [Effects](https://github.com/big-mesh-studios/rmsl/blob/main/docs/effects.md) - Post-processing effects ported from three.js TSL (`@random-mesh/rmsl/effects`)
 - [Scene Graph](https://github.com/big-mesh-studios/rmsl/blob/main/docs/scene.md) - three.js-style scene objects and node-based materials (`@random-mesh/rmsl/scene`)
 - [Vite Plugins](https://github.com/big-mesh-studios/rmsl/blob/main/docs/vite-plugins.md) - Precompiling shaders and CPU callables at build time so rmsl is never shipped

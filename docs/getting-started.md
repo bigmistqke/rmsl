@@ -50,6 +50,22 @@ import { compileWGSL } from "rmsl";
 let wgsl = compileWGSL(prog());
 ```
 
+## Running it
+
+Compiling gives you source. To put it on screen, `rmsl/webgl` links a program
+and writes its uniforms through the nodes that declared them:
+
+```typescript
+import { createWebGLProgram } from "rmsl/webgl";
+
+let { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+
+gl.useProgram(program);
+set(colour, 1, 0, 0);
+```
+
 ## Next
 
-See [API Reference](api.md) for the full type system and operations.
+- [API Reference](api.md) — the full type system and operations
+- [WebGL Bindings](webgl.md) — running a program and setting its uniforms
+- [Compilation](compilation.md) — what the backends emit
