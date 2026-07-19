@@ -280,11 +280,24 @@ The principled fix is for the project to adopt `nodenext` itself, which
 enforces the rule everywhere — at the cost of an extension on every relative
 import in `src/`.
 
-Also rejected: `bundleTypes` (api-extractor), which would remove relative
-imports from the declarations entirely. It re-declares `BaseNode`'s private
-`__brand` symbol per entry, so a `Node` from `rmsl` and a `UniformNode` from
-`rmsl/webgl` stop being the same type. `apps/infinite-grid` imports from both
-and fails to type-check the moment it is enabled.
+### Do not turn on `bundleTypes`
+
+The declarations are emitted per file and share what they have in common:
+`dist/rmsl.d.ts` declares `BaseNode`'s private `__brand` symbol once, and the
+webgl declarations import from it. One symbol, one node identity.
+
+`bundleTypes` (api-extractor) instead inlines `BaseNode` into a self-contained
+`webgl.d.ts`, which means declaring a *second* `__brand`. Two independently
+declared `unique symbol`s are different types even when textually identical, so
+a `Node` built by `rmsl` stops matching a `UniformNode` consumed by
+`rmsl/webgl`. `apps/infinite-grid` imports from both and fails to type-check
+the moment it is enabled.
+
+This is `unique symbol` nominality rather than a fault in api-extractor, so
+swapping in another declaration bundler does not help — anything that inlines
+breaks the same way. There is no reason to want a self-contained file here
+anyway; it was only considered as a way to avoid relative imports, and with
+`node16` unsupported there is nothing to avoid.
 
 ## Bugs found in view.gl — fix, do not port
 
