@@ -8,6 +8,7 @@
  */
 
 export { createWebGLProgram, reflectUniforms } from "./program";
+export { createUniformSetter } from "./uniforms";
 export type {
   Setter,
   UniformArgs,

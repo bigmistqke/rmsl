@@ -53,6 +53,22 @@ describe("scalars and vectors", () => {
     set(u, 7);
     expect(calls).toEqual([{ fn: "uniform1ui", args: [location, 7] }]);
   });
+
+  // Integer vectors are their own family, distinct from float vectors and from
+  // the boolean vectors that happen to share their GL call.
+  it("writes an ivec3 through uniform3i", () => {
+    const u = uniform("ivec3");
+    const { set, calls, location } = setterFor(u);
+    set(u, 1, -2, 3);
+    expect(calls).toEqual([{ fn: "uniform3i", args: [location, 1, -2, 3] }]);
+  });
+
+  it("writes a uvec2 through uniform2ui", () => {
+    const u = uniform("uvec2");
+    const { set, calls, location } = setterFor(u);
+    set(u, 1, 2);
+    expect(calls).toEqual([{ fn: "uniform2ui", args: [location, 1, 2] }]);
+  });
 });
 
 describe("booleans", () => {
@@ -109,6 +125,21 @@ describe("samplers", () => {
     const { set, calls, location } = setterFor(u);
     set(u, 3);
     expect(calls).toEqual([{ fn: "uniform1i", args: [location, 3] }]);
+  });
+
+  // Every sampler variant binds a texture unit index the same way, whatever
+  // the sampled texture's own component type is.
+  it("writes every sampler kind through uniform1i", () => {
+    for (const type of [
+      "sampler3D", "samplerCube",
+      "isampler2D", "isampler3D", "isamplerCube",
+      "usampler2D", "usampler3D", "usamplerCube",
+    ] as const) {
+      const u = uniform(type);
+      const { set, calls, location } = setterFor(u);
+      set(u, 2);
+      expect(calls).toEqual([{ fn: "uniform1i", args: [location, 2] }]);
+    }
   });
 });
 
@@ -176,6 +207,14 @@ describe("uniform arrays", () => {
     const data = new Int32Array(5);
     set(u, data);
     expect(calls).toEqual([{ fn: "uniform1iv", args: [location, data] }]);
+  });
+
+  it("writes a uvec3 array through uniform3uiv", () => {
+    const u = uniformArray("uvec3", 2);
+    const { set, calls, location } = setterFor(u);
+    const data = new Uint32Array(6);
+    set(u, data);
+    expect(calls).toEqual([{ fn: "uniform3uiv", args: [location, data] }]);
   });
 
   // A bulk upload has no per-element brand to lean on, so a wrong-length

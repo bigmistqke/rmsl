@@ -45,6 +45,14 @@ export interface UniformArgs {
   int: [number];
   uint: [number];
 
+  ivec2: [number, number];
+  ivec3: [number, number, number];
+  ivec4: [number, number, number, number];
+
+  uvec2: [number, number];
+  uvec3: [number, number, number];
+  uvec4: [number, number, number, number];
+
   bool: [Bool];
   bvec2: [Bool, Bool];
   bvec3: [Bool, Bool, Bool];
@@ -62,9 +70,17 @@ export interface UniformArgs {
   mat4x3: [Mat<12>];
   mat4: [Mat<16>];
 
-  // A sampler is written with the index of the texture unit to read from.
+  // A sampler is written with the index of the texture unit to read from,
+  // whatever the sampled texture's own component type is.
   sampler2D: [number];
+  sampler3D: [number];
   samplerCube: [number];
+  isampler2D: [number];
+  isampler3D: [number];
+  isamplerCube: [number];
+  usampler2D: [number];
+  usampler3D: [number];
+  usamplerCube: [number];
 }
 
 /** Every shader type a host can write. `void` is the one that is excluded. */
@@ -94,6 +110,14 @@ const WRITERS: Record<SettableType, Writer> = {
   int: (gl, l, [x]) => gl.uniform1i(l, x),
   uint: (gl, l, [x]) => gl.uniform1ui(l, x),
 
+  ivec2: (gl, l, [x, y]) => gl.uniform2i(l, x, y),
+  ivec3: (gl, l, [x, y, z]) => gl.uniform3i(l, x, y, z),
+  ivec4: (gl, l, [x, y, z, w]) => gl.uniform4i(l, x, y, z, w),
+
+  uvec2: (gl, l, [x, y]) => gl.uniform2ui(l, x, y),
+  uvec3: (gl, l, [x, y, z]) => gl.uniform3ui(l, x, y, z),
+  uvec4: (gl, l, [x, y, z, w]) => gl.uniform4ui(l, x, y, z, w),
+
   bool: (gl, l, [x]) => gl.uniform1i(l, bit(x)),
   bvec2: (gl, l, [x, y]) => gl.uniform2i(l, bit(x), bit(y)),
   bvec3: (gl, l, [x, y, z]) => gl.uniform3i(l, bit(x), bit(y), bit(z)),
@@ -110,7 +134,14 @@ const WRITERS: Record<SettableType, Writer> = {
   mat4: (gl, l, [m]) => gl.uniformMatrix4fv(l, NO_TRANSPOSE, m),
 
   sampler2D: (gl, l, [unit]) => gl.uniform1i(l, unit),
+  sampler3D: (gl, l, [unit]) => gl.uniform1i(l, unit),
   samplerCube: (gl, l, [unit]) => gl.uniform1i(l, unit),
+  isampler2D: (gl, l, [unit]) => gl.uniform1i(l, unit),
+  isampler3D: (gl, l, [unit]) => gl.uniform1i(l, unit),
+  isamplerCube: (gl, l, [unit]) => gl.uniform1i(l, unit),
+  usampler2D: (gl, l, [unit]) => gl.uniform1i(l, unit),
+  usampler3D: (gl, l, [unit]) => gl.uniform1i(l, unit),
+  usamplerCube: (gl, l, [unit]) => gl.uniform1i(l, unit),
 };
 
 /**
@@ -118,7 +149,12 @@ const WRITERS: Record<SettableType, Writer> = {
  * `uniformArray` itself throws for them — there is no texture-array uniform
  * to reach this code, so it needs no handling here either.
  */
-export type SettableArrayType = Exclude<SettableType, "sampler2D" | "samplerCube">;
+export type SettableArrayType = Exclude<
+  SettableType,
+  | "sampler2D" | "sampler3D" | "samplerCube"
+  | "isampler2D" | "isampler3D" | "isamplerCube"
+  | "usampler2D" | "usampler3D" | "usamplerCube"
+>;
 
 /**
  * How many numbers one element occupies, so a bulk upload's length can be
@@ -129,9 +165,9 @@ export type SettableArrayType = Exclude<SettableType, "sampler2D" | "samplerCube
 const ELEMENT_COMPONENTS: Record<SettableArrayType, number> = {
   float: 1, int: 1, uint: 1, bool: 1,
 
-  vec2: 2, bvec2: 2,
-  vec3: 3, bvec3: 3,
-  vec4: 4, bvec4: 4,
+  vec2: 2, bvec2: 2, ivec2: 2, uvec2: 2,
+  vec3: 3, bvec3: 3, ivec3: 3, uvec3: 3,
+  vec4: 4, bvec4: 4, ivec4: 4, uvec4: 4,
 
   mat2: 4,
   mat2x3: 6, mat3x2: 6,
@@ -168,8 +204,14 @@ export interface ArrayData {
   bvec2: IntBuffer;
   bvec3: IntBuffer;
   bvec4: IntBuffer;
+  ivec2: IntBuffer;
+  ivec3: IntBuffer;
+  ivec4: IntBuffer;
 
   uint: UintBuffer;
+  uvec2: UintBuffer;
+  uvec3: UintBuffer;
+  uvec4: UintBuffer;
 
   mat2: FloatBuffer;
   mat2x3: FloatBuffer;
@@ -197,6 +239,14 @@ const ARRAY_WRITERS: Record<SettableArrayType, ArrayWriter> = {
 
   int: (gl, l, d) => gl.uniform1iv(l, d as IntBuffer),
   uint: (gl, l, d) => gl.uniform1uiv(l, d as UintBuffer),
+
+  ivec2: (gl, l, d) => gl.uniform2iv(l, d as IntBuffer),
+  ivec3: (gl, l, d) => gl.uniform3iv(l, d as IntBuffer),
+  ivec4: (gl, l, d) => gl.uniform4iv(l, d as IntBuffer),
+
+  uvec2: (gl, l, d) => gl.uniform2uiv(l, d as UintBuffer),
+  uvec3: (gl, l, d) => gl.uniform3uiv(l, d as UintBuffer),
+  uvec4: (gl, l, d) => gl.uniform4uiv(l, d as UintBuffer),
 
   // Booleans go through the integer calls, as they do for scalars.
   bool: (gl, l, d) => gl.uniform1iv(l, d as IntBuffer),

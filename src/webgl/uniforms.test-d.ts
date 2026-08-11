@@ -31,10 +31,21 @@ describe("argument tuples", () => {
     >();
   });
 
-  // A sampler is set to a texture unit index, not to a texture.
+  // A sampler is set to a texture unit index, not to a texture — true of
+  // every variant, whatever the sampled texture's own component type is.
   it("takes a unit index for samplers", () => {
     expectTypeOf<UniformArgs["sampler2D"]>().toEqualTypeOf<[number]>();
+    expectTypeOf<UniformArgs["sampler3D"]>().toEqualTypeOf<[number]>();
     expectTypeOf<UniformArgs["samplerCube"]>().toEqualTypeOf<[number]>();
+    expectTypeOf<UniformArgs["isampler2D"]>().toEqualTypeOf<[number]>();
+    expectTypeOf<UniformArgs["usampler2D"]>().toEqualTypeOf<[number]>();
+  });
+
+  // Integer and unsigned vectors take plain numbers, not the boolean-or-number
+  // union bvec accepts — they have no boolean form to leak.
+  it("gives ivec and uvec their component count", () => {
+    expectTypeOf<UniformArgs["ivec3"]>().toEqualTypeOf<[number, number, number]>();
+    expectTypeOf<UniformArgs["uvec2"]>().toEqualTypeOf<[number, number]>();
   });
 });
 

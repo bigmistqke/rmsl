@@ -84,11 +84,15 @@ so does this.
 | --- | --- |
 | `float`, `int`, `uint` | one number |
 | `vec2`, `vec3`, `vec4` | 2, 3 or 4 numbers |
+| `ivec2`, `ivec3`, `ivec4` | 2, 3 or 4 numbers |
+| `uvec2`, `uvec3`, `uvec4` | 2, 3 or 4 numbers |
 | `bool` | one `boolean` or number |
 | `bvec2`, `bvec3`, `bvec4` | 2, 3 or 4 `boolean`s or numbers |
 | `mat2`, `mat3`, `mat4` | one `Float32Array`, or exactly as many numbers as the matrix holds |
 | `mat2x3`, `mat2x4`, `mat3x2`, `mat3x4`, `mat4x2`, `mat4x3` | the same — non-square matrices behave identically |
-| `sampler2D`, `samplerCube` | one number — the texture unit, not the texture |
+| `sampler2D`, `sampler3D`, `samplerCube` | one number — the texture unit, not the texture |
+| `isampler2D`, `isampler3D`, `isamplerCube` | the same — an integer texture's uniform is still a unit index |
+| `usampler2D`, `usampler3D`, `usamplerCube` | the same |
 
 Matrix lengths are checked at compile time, counting columns × rows. `mat4`
 wants 16, `mat3` wants 9, and `mat2x3` and `mat3x2` both want 6:
@@ -124,9 +128,9 @@ Which buffer type each element takes:
 
 | Element type | Buffer |
 | --- | --- |
-| `float`, all vectors, all matrices | `Float32Array` or `number[]` |
-| `int`, `bool`, all `bvec` | `Int32Array` or `number[]` |
-| `uint` | `Uint32Array` or `number[]` |
+| `float`, `vec2`/`vec3`/`vec4`, all matrices | `Float32Array` or `number[]` |
+| `int`, `bool`, all `bvec`, all `ivec` | `Int32Array` or `number[]` |
+| `uint`, all `uvec` | `Uint32Array` or `number[]` |
 
 Booleans are numbers here, unlike the single-value case. Converting one value
 is free; converting a whole array would copy it on every upload, which is the
