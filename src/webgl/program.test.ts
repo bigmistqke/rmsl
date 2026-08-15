@@ -151,7 +151,7 @@ describe("createWebGLProgram", () => {
 
   it("deletes the program and shader when the vertex shader fails to compile", () => {
     const { gl, log } = glStub({ vertexCompiles: false, fragmentCompiles: true, linkSucceeds: true });
-    expect(() => createWebGLProgram(gl, vertexGraph(), fragmentGraph())).toThrow(/vertex shader did not compile/);
+    expect(() => createWebGLProgram(gl, { vertex: vertexGraph(), fragment: fragmentGraph() })).toThrow(/vertex shader did not compile/);
     expect(log.shaders).toHaveLength(1);
     expectNothingLeaked(log);
   });
@@ -160,14 +160,14 @@ describe("createWebGLProgram", () => {
   // already-compiled vertex shader both have to be cleaned up here too.
   it("deletes the program and both shaders when the fragment shader fails to compile", () => {
     const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: false, linkSucceeds: true });
-    expect(() => createWebGLProgram(gl, vertexGraph(), fragmentGraph())).toThrow(/fragment shader did not compile/);
+    expect(() => createWebGLProgram(gl, { vertex: vertexGraph(), fragment: fragmentGraph() })).toThrow(/fragment shader did not compile/);
     expect(log.shaders).toHaveLength(2);
     expectNothingLeaked(log);
   });
 
   it("deletes the program and both shaders when the program fails to link", () => {
     const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: false });
-    expect(() => createWebGLProgram(gl, vertexGraph(), fragmentGraph())).toThrow(/did not link/);
+    expect(() => createWebGLProgram(gl, { vertex: vertexGraph(), fragment: fragmentGraph() })).toThrow(/did not link/);
     expect(log.shaders).toHaveLength(2);
     expectNothingLeaked(log);
   });

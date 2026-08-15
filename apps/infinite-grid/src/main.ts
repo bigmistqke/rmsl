@@ -48,7 +48,10 @@ if (!gl) {
   throw new Error("WebGL2 not supported");
 }
 
-let { program, set } = createWebGLProgram(gl, vertexMain(), calcColourAndDepth());
+let { program, set } = createWebGLProgram(gl, {
+  vertex: vertexMain(),
+  fragment: calcColourAndDepth(),
+});
 gl.useProgram(program);
 
 // Full-screen quad VBO

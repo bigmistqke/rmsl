@@ -69,7 +69,7 @@ describe("what a precompiled build bundles", () => {
       import { Fn, vec4 } from "../rmsl";
       declare const gl: WebGL2RenderingContext;
       const root = Fn(() => vec4(1, 0, 0, 1))();
-      console.log(createWebGLProgram(gl, root, root));
+      console.log(createWebGLProgram(gl, { vertex: root, fragment: root }));
     `);
     for (const name of COMPILER_INTERNALS) expect(code).toContain(name);
   });

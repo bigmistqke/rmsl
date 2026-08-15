@@ -50,7 +50,7 @@ let colour = uniform("vec3");
 let mvp = uniform("mat4");
 let bricks = uniformArray("vec4", 24);
 
-let { program, set } = createWebGLProgram(gl, vertexRoot, fragmentRoot);
+let { program, set } = createWebGLProgram(gl, { vertex: vertexRoot, fragment: fragmentRoot });
 
 gl.useProgram(program);
 set(colour, 1, 0, 0);       // components

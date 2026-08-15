@@ -8,6 +8,7 @@
  */
 
 export { createWebGLProgram } from "./program";
+export type { ShaderRoots } from "./program";
 // Kept apart from createWebGLProgram on purpose: these reach a linked program
 // without naming the compiler, so importing them does not bundle it.
 export { linkWebGLProgram, reflectUniforms } from "./link";

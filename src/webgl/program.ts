@@ -17,6 +17,23 @@ import { type Setter } from "./uniforms";
 type FragmentRoot = Node<ShaderType> | Node<ShaderType>[];
 
 /**
+ * The node graph for both stages.
+ *
+ * Named rather than positional because the two are not reliably distinguished
+ * by type: a fragment stage usually ends in a `vec4` colour, which also
+ * satisfies a vertex root, so passing them the wrong way round would type-check
+ * and then compile into two shaders that draw the wrong thing. A field name
+ * cannot be swapped by accident.
+ *
+ * `vertex` is optional for the same reason `VertexRoot` includes `void` — a
+ * stage that assigns `builtinPosition()` itself has no value to return.
+ */
+export interface ShaderRoots {
+  vertex?: VertexRoot;
+  fragment: FragmentRoot;
+}
+
+/**
  * Compiles both stages, links them, and reads back which uniforms survived.
  *
  * Importing this pulls in the GLSL compiler, which is the point of it — a host
@@ -29,11 +46,10 @@ type FragmentRoot = Node<ShaderType> | Node<ShaderType>[];
  */
 export function createWebGLProgram(
   gl: WebGL2RenderingContext,
-  vertexRoot: VertexRoot,
-  fragmentRoot: FragmentRoot,
+  roots: ShaderRoots,
 ): { program: WebGLProgram; set: Setter } {
   return linkWebGLProgram(gl, {
-    vertex: compileGLSL.vertex(vertexRoot),
-    fragment: compileGLSL.fragment(fragmentRoot),
+    vertex: compileGLSL.vertex(roots.vertex),
+    fragment: compileGLSL.fragment(roots.fragment),
   });
 }

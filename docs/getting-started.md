@@ -58,7 +58,10 @@ and writes its uniforms through the nodes that declared them:
 ```typescript
 import { createWebGLProgram } from "@random-mesh/rmsl/webgl";
 
-let { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+let { program, set } = createWebGLProgram(gl, {
+  vertex: vertexMain(),
+  fragment: fragmentMain(),
+});
 
 gl.useProgram(program);
 set(colour, 1, 0, 0);

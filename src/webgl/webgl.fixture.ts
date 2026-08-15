@@ -45,7 +45,7 @@ export function probeUniform(): number[] {
     gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0,
   );
 
-  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+  const { program, set } = createWebGLProgram(gl, { vertex: vertexMain(), fragment: fragmentMain() });
   gl.useProgram(program);
 
   const buffer = gl.createBuffer();
@@ -103,7 +103,7 @@ export function probeEliminated(): { declared: boolean; warnings: number } {
   const gl = canvas.getContext("webgl2");
   if (!gl) throw new Error("WebGL2 unavailable in the test browser");
 
-  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentRoot);
+  const { program, set } = createWebGLProgram(gl, { vertex: vertexMain(), fragment: fragmentRoot });
   gl.useProgram(program);
 
   let warnings = 0;
@@ -153,7 +153,7 @@ export function probeUniformArray(): number[] {
     gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0,
   );
 
-  const { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+  const { program, set } = createWebGLProgram(gl, { vertex: vertexMain(), fragment: fragmentMain() });
   gl.useProgram(program);
 
   const buffer = gl.createBuffer();

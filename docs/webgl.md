@@ -12,7 +12,10 @@ import { createWebGLProgram } from "@random-mesh/rmsl/webgl";
 
 let colour = uniform("vec3");
 
-let { program, set } = createWebGLProgram(gl, vertexMain(), fragmentMain());
+let { program, set } = createWebGLProgram(gl, {
+  vertex: vertexMain(),
+  fragment: fragmentMain(),
+});
 
 gl.useProgram(program);
 set(colour, 1, 0, 0);
@@ -31,18 +34,26 @@ your context with `canvas.getContext("webgl2")`.
 ```typescript
 createWebGLProgram(
   gl: WebGL2RenderingContext,
-  vertexRoot: VertexRoot,
-  fragmentRoot: Node<ShaderType> | Node<ShaderType>[],
+  roots: {
+    vertex?: VertexRoot,
+    fragment: Node<ShaderType> | Node<ShaderType>[],
+  },
 ): { program: WebGLProgram; set: Setter }
 ```
 
 Compiles both stages, links them, and reads back which uniforms survived.
 
-A vertex stage produces a position, so `vertexRoot` is
+A vertex stage produces a position, so `vertex` is
 `Node<"vec4"> | Node<"vec4">[] | void` — the compiler will not accept anything
 that cannot become one. Return an array when the stage has several results, in
-which case the last one becomes the position; return nothing when you assign
-`builtinPosition()` yourself.
+which case the last one becomes the position; omit `vertex` entirely when you
+assign `builtinPosition()` yourself.
+
+The two stages are named rather than positional because their types do not
+reliably tell them apart. A fragment stage usually ends in a `vec4` colour,
+which also satisfies a vertex root — so passing them the wrong way round would
+type-check, compile, link, and draw the wrong thing. A field name cannot be
+swapped by accident.
 
 Throws if either shader fails to compile or if the program fails to link. A
 compile error names the stage and includes the generated source, since the line
@@ -79,8 +90,9 @@ let { program, set } = linkWebGLProgram(gl, {
 point.** A bundler drops code by module, so a single function mentioning
 `compileGLSL` anywhere keeps the entire compiler in the bundle for everyone who
 calls it. Reaching a linked program through `linkWebGLProgram` never names the
-compiler, so a precompiled app does not ship it: measured on this repository,
-about 6 kB rather than about 113 kB.
+compiler, so a precompiled app does not ship it: bundling the built files, an
+app that links sources and writes a uniform comes to about 4.6 kB minified,
+against about 61.6 kB for the same app built from nodes.
 
 That only holds because the package declares `"sideEffects": false`. Without it
 a bundler must assume importing a module matters, and rmsl's top-level
