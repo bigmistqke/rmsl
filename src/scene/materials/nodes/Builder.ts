@@ -1,6 +1,6 @@
 import {
   attribute, uniformRaw, varying,
-  type AttributeNode, type ShaderType, type UniformNode, type VaryingNode,
+  type AttributeNode, type ShaderType, type UniformNode, type VariableNode, type VaryingNode,
 } from "../../../rmsl";
 import type { Camera } from "../../cameras/Camera";
 import type { Mesh } from "../../objects/Mesh";
@@ -153,20 +153,26 @@ export class Builder {
   // the vertex writes in the fragment stage — the fragment cannot read a vertex
   // input, so `b.uv.x` inside a `colorNode` or `fragmentNode` must mean the
   // interpolated uv, not the geometry attribute.
+  //
+  // Which of the two comes back is a run-time property of the stage, so the
+  // return type is the one thing both are: a named variable of that type. It
+  // reads as a value either way, which is all a material node does with it;
+  // callers that need the distinction should ask for the attribute or the
+  // varying by name.
 
-  get position(): AttributeNode<"vec3"> {
+  get position(): VariableNode<"vec3"> {
     return this.stage === "vertex"
       ? this.attribute("position", "vec3")
       : this.varying("positionWorld", "vec3");
   }
 
-  get normal(): AttributeNode<"vec3"> {
+  get normal(): VariableNode<"vec3"> {
     return this.stage === "vertex"
       ? this.attribute("normal", "vec3")
       : this.varying("normalWorld", "vec3");
   }
 
-  get uv(): AttributeNode<"vec2"> {
+  get uv(): VariableNode<"vec2"> {
     return this.stage === "vertex"
       ? this.attribute("uv", "vec2")
       : this.varying("uv", "vec2");

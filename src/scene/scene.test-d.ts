@@ -14,7 +14,7 @@ import {
   type MaterialProgram,
   type SamplerBinding,
 } from "./index";
-import type { Node, UniformNode, VaryingNode, AttributeNode, ShaderType } from "../rmsl";
+import type { Node, UniformNode, VaryingNode, VariableNode, ShaderType } from "../rmsl";
 import type { BufferGeometry } from "./geometries/BufferGeometry";
 import { float } from "../rmsl";
 
@@ -77,9 +77,11 @@ describe("node materials", () => {
 
   it("exposes typed accessors on the builder", () => {
     const b = new Builder();
-    expectTypeOf(b.position).toEqualTypeOf<AttributeNode<"vec3">>();
-    expectTypeOf(b.normal).toEqualTypeOf<AttributeNode<"vec3">>();
-    expectTypeOf(b.uv).toEqualTypeOf<AttributeNode<"vec2">>();
+    // Attribute in the vertex stage, varying in the fragment stage, so the
+    // static type is the one both share.
+    expectTypeOf(b.position).toEqualTypeOf<VariableNode<"vec3">>();
+    expectTypeOf(b.normal).toEqualTypeOf<VariableNode<"vec3">>();
+    expectTypeOf(b.uv).toEqualTypeOf<VariableNode<"vec2">>();
     expectTypeOf(b.positionWorld).toEqualTypeOf<VaryingNode<"vec3">>();
     expectTypeOf(b.normalWorld).toEqualTypeOf<VaryingNode<"vec3">>();
     expectTypeOf(b.cameraPosition).toEqualTypeOf<UniformNode<"vec3">>();
