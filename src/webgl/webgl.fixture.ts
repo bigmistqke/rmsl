@@ -12,7 +12,7 @@
  */
 
 import { Fn, attribute, compileGLSL, uniform, uniformArray, uniformRaw, vec4 } from "../rmsl";
-import { createWebGLProgram, describeUniform } from "./index";
+import { createWebGLProgram, describeUniform, linkWebGLProgram } from "./index";
 
 /**
  * Renders one pixel whose colour is a uniform, and reads it back.
@@ -229,7 +229,7 @@ export function probePrecompiled(): number[] {
     gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0,
   );
 
-  const { program, set } = createWebGLProgram(gl, {
+  const { program, set } = linkWebGLProgram(gl, {
     vertex: artefact.vertex,
     fragment: artefact.fragment,
   });

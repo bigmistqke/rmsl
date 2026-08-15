@@ -7,8 +7,11 @@
  * WebGL2 only — RMSL compiles to GLSL ES 3.0, which WebGL1 cannot load.
  */
 
-export { createWebGLProgram, reflectUniforms } from "./program";
-export type { ShaderSources } from "./program";
+export { createWebGLProgram } from "./program";
+// Kept apart from createWebGLProgram on purpose: these reach a linked program
+// without naming the compiler, so importing them does not bundle it.
+export { linkWebGLProgram, reflectUniforms } from "./link";
+export type { ShaderSources } from "./link";
 export { createUniformSetter, describeUniform } from "./uniforms";
 export type {
   Setter,

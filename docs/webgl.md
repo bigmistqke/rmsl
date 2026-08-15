@@ -50,32 +50,43 @@ numbers a driver reports refer to that rather than to your node graph; a link
 error carries the driver's log. Nothing is left allocated on the context when
 it throws.
 
-### Given GLSL you already have
+## linkWebGLProgram
 
 ```typescript
-createWebGLProgram(
+linkWebGLProgram(
   gl: WebGL2RenderingContext,
   sources: { vertex: string; fragment: string },
 ): { program: WebGLProgram; set: Setter }
 ```
 
 Takes ready-made GLSL instead of a node graph, and does everything else the
-same way. This is the form for a build that
-[precompiles its shaders](vite-plugins.md): the compiler ran in Node, so the
-browser has the sources but no graph — and linking, cleaning up after a
-failure, and reading back which uniforms survived are all still worth having.
-
-The two forms are told apart by what you pass: a `vertex` string means sources,
-and anything else is a vertex root.
+same way — `createWebGLProgram` compiles and then calls this. It is the form
+for a build that [precompiles its shaders](vite-plugins.md): the compiler ran
+in Node, so the browser has the sources but no graph, while linking, cleaning
+up after a failure, and reading back which uniforms survived are all still
+worth having.
 
 ```typescript
 import shaders from "./shaders";   // plain JSON at run time
 
-let { program, set } = createWebGLProgram(gl, {
+let { program, set } = linkWebGLProgram(gl, {
   vertex: shaders.vertex,
   fragment: shaders.fragment,
 });
 ```
+
+**This is a separate function rather than an overload, and that is the whole
+point.** A bundler drops code by module, so a single function mentioning
+`compileGLSL` anywhere keeps the entire compiler in the bundle for everyone who
+calls it. Reaching a linked program through `linkWebGLProgram` never names the
+compiler, so a precompiled app does not ship it: measured on this repository,
+about 6 kB rather than about 113 kB.
+
+That only holds because the package declares `"sideEffects": false`. Without it
+a bundler must assume importing a module matters, and rmsl's top-level
+`Object.assign` calls keep the compiler alive however little of it is used.
+`src/webgl/treeshaking.test.ts` bundles both paths and checks the compiler is
+absent from one and present in the other.
 
 ## set
 

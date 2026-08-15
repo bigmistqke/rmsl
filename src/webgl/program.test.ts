@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { reflectUniforms, createWebGLProgram } from "./program";
+import { createWebGLProgram } from "./program";
+import { reflectUniforms, linkWebGLProgram } from "./link";
 import { Fn, attribute, vec4 } from "../rmsl";
 
 /** A stub program exposing a fixed set of active uniforms. */
@@ -173,8 +174,9 @@ describe("createWebGLProgram", () => {
 
   // A build that precompiles its shaders has the sources already and no
   // compiler to run, but still wants the linking, the cleanup and the
-  // reflection that surround it.
-  describe("given ready-made sources", () => {
+  // reflection that surround it. That half is linkWebGLProgram, which
+  // createWebGLProgram itself calls once it has compiled.
+  describe("linkWebGLProgram, given ready-made sources", () => {
     const sources = {
       vertex: "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }",
       fragment: "#version 300 es\nout vec4 c; void main() { c = vec4(1.0); }",
@@ -182,20 +184,20 @@ describe("createWebGLProgram", () => {
 
     it("hands the driver exactly the sources it was given", () => {
       const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: true });
-      createWebGLProgram(gl, sources);
+      linkWebGLProgram(gl, sources);
       expect(log.sources).toEqual([sources.vertex, sources.fragment]);
     });
 
     it("returns the linked program", () => {
       const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: true });
-      const { program } = createWebGLProgram(gl, sources);
+      const { program } = linkWebGLProgram(gl, sources);
       expect(program).toBe(log.programs[0]);
       expect(log.deletedPrograms).toEqual([]);
     });
 
     it("cleans up after a link failure just as the node form does", () => {
       const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: false });
-      expect(() => createWebGLProgram(gl, sources)).toThrow(/did not link/);
+      expect(() => linkWebGLProgram(gl, sources)).toThrow(/did not link/);
       expect(log.shaders).toHaveLength(2);
       expectNothingLeaked(log);
     });

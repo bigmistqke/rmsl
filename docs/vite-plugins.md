@@ -63,9 +63,11 @@ import shaders from "./shaders";  // plain JSON at runtime
 ```
 
 `@random-mesh/rmsl/webgl` can take it from there without a graph:
-`createWebGLProgram(gl, { vertex, fragment })` links the precompiled sources,
-and `set(shaders.uColour, 1, 0, 0)` writes the uniform with the shader type
-still checked.
+`linkWebGLProgram(gl, { vertex, fragment })` links the precompiled sources, and
+`set(shaders.uColour, 1, 0, 0)` writes the uniform with the shader type still
+checked. Use `linkWebGLProgram` rather than `createWebGLProgram` here — the
+latter names the compiler, so calling it would put rmsl back in the bundle the
+plugin just took it out of.
 
 The default export must be JSON-serializable (strings, numbers, booleans, arrays, plain objects). A module without a default export, or one whose default export is not serializable, fails the build with a message naming the module.
 
