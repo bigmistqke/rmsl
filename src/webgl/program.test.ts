@@ -66,6 +66,8 @@ describe("createWebGLProgram", () => {
     shaders: WebGLShader[];
     deletedPrograms: WebGLProgram[];
     deletedShaders: WebGLShader[];
+    /** Every source string handed to the driver, in the order it was given. */
+    sources: string[];
   };
 
   /**
@@ -77,7 +79,9 @@ describe("createWebGLProgram", () => {
     fragmentCompiles: boolean;
     linkSucceeds: boolean;
   }): { gl: WebGL2RenderingContext; log: Log } {
-    const log: Log = { programs: [], shaders: [], deletedPrograms: [], deletedShaders: [] };
+    const log: Log = {
+      programs: [], shaders: [], deletedPrograms: [], deletedShaders: [], sources: [],
+    };
     const stageOf = new Map<WebGLShader, number>();
 
     const gl = {
@@ -85,6 +89,7 @@ describe("createWebGLProgram", () => {
       FRAGMENT_SHADER: 0x8b30,
       COMPILE_STATUS: 0x8b81,
       LINK_STATUS: 0x8b82,
+      ACTIVE_UNIFORMS: 0x8b86,
       createProgram: () => {
         const program = {} as WebGLProgram;
         log.programs.push(program);
@@ -96,7 +101,9 @@ describe("createWebGLProgram", () => {
         log.shaders.push(shader);
         return shader;
       },
-      shaderSource: () => {},
+      shaderSource: (_: WebGLShader, source: string) => {
+        log.sources.push(source);
+      },
       compileShader: () => {},
       getShaderParameter: (shader: WebGLShader) =>
         stageOf.get(shader) === gl.VERTEX_SHADER ? options.vertexCompiles : options.fragmentCompiles,
@@ -107,7 +114,12 @@ describe("createWebGLProgram", () => {
       },
       attachShader: () => {},
       linkProgram: () => {},
-      getProgramParameter: () => options.linkSucceeds,
+      // Reflection asks this the same way linking does, so the two are told
+      // apart by which parameter was requested.
+      getProgramParameter: (_: unknown, parameter: number) =>
+        parameter === 0x8b86 ? 0 : options.linkSucceeds,
+      getActiveUniform: () => null,
+      getUniformLocation: () => null,
       getProgramInfoLog: () => "link failed",
       deleteProgram: (program: WebGLProgram) => {
         log.deletedPrograms.push(program);
@@ -157,5 +169,35 @@ describe("createWebGLProgram", () => {
     expect(() => createWebGLProgram(gl, vertexGraph(), fragmentGraph())).toThrow(/did not link/);
     expect(log.shaders).toHaveLength(2);
     expectNothingLeaked(log);
+  });
+
+  // A build that precompiles its shaders has the sources already and no
+  // compiler to run, but still wants the linking, the cleanup and the
+  // reflection that surround it.
+  describe("given ready-made sources", () => {
+    const sources = {
+      vertex: "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }",
+      fragment: "#version 300 es\nout vec4 c; void main() { c = vec4(1.0); }",
+    };
+
+    it("hands the driver exactly the sources it was given", () => {
+      const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: true });
+      createWebGLProgram(gl, sources);
+      expect(log.sources).toEqual([sources.vertex, sources.fragment]);
+    });
+
+    it("returns the linked program", () => {
+      const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: true });
+      const { program } = createWebGLProgram(gl, sources);
+      expect(program).toBe(log.programs[0]);
+      expect(log.deletedPrograms).toEqual([]);
+    });
+
+    it("cleans up after a link failure just as the node form does", () => {
+      const { gl, log } = glStub({ vertexCompiles: true, fragmentCompiles: true, linkSucceeds: false });
+      expect(() => createWebGLProgram(gl, sources)).toThrow(/did not link/);
+      expect(log.shaders).toHaveLength(2);
+      expectNothingLeaked(log);
+    });
   });
 });

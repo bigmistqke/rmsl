@@ -11,8 +11,8 @@
  * of the page.
  */
 
-import { Fn, attribute, compileGLSL, uniform, uniformArray, vec4 } from "../rmsl";
-import { createWebGLProgram } from "./index";
+import { Fn, attribute, compileGLSL, uniform, uniformArray, uniformRaw, vec4 } from "../rmsl";
+import { createWebGLProgram, describeUniform } from "./index";
 
 /**
  * Renders one pixel whose colour is a uniform, and reads it back.
@@ -179,4 +179,77 @@ export function probeUniformArray(): number[] {
   const out = new Float32Array(4);
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, out);
   return [out[0]!, out[1]!, out[2]!, out[3]!];
+}
+
+/**
+ * Renders a uniform set the way a precompiled build sets it.
+ *
+ * The two halves are deliberately separated by JSON. Everything above the
+ * round trip is what the vite plugin does at build time, in Node, where the
+ * graph still exists; everything below it is what the browser is left with
+ * once the plugin has replaced that module with its result. Passing the
+ * artefact through `JSON.parse(JSON.stringify(...))` is what makes the second
+ * half honest — a descriptor that still worked by reaching a live node would
+ * lose that node here, exactly as it does in a real build.
+ *
+ * Returns the RGB that arrived, which can only match if a plain object with
+ * two strings in it was enough to pick the right GL call and location.
+ */
+export function probePrecompiled(): number[] {
+  // === build time ===
+  const position = attribute("vec2");
+  const colour = uniformRaw("uColour", "vec3");
+
+  const vertexMain = Fn(() => vec4(position.x, position.y, 0.0, 1.0));
+  const fragmentMain = Fn(() => vec4(colour.x, colour.y, colour.z, 1.0));
+
+  const built = {
+    position: position.name,
+    colour: describeUniform(colour),
+    vertex: compileGLSL.vertex(vertexMain()),
+    fragment: compileGLSL.fragment(fragmentMain()),
+  };
+
+  // === run time: only what survives serialisation ===
+  const artefact: typeof built = JSON.parse(JSON.stringify(built));
+
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2");
+  if (!gl) throw new Error("WebGL2 unavailable in the test browser");
+  if (!gl.getExtension("EXT_color_buffer_float")) {
+    throw new Error("EXT_color_buffer_float unavailable; cannot read a float back");
+  }
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0,
+  );
+
+  const { program, set } = createWebGLProgram(gl, {
+    vertex: artefact.vertex,
+    fragment: artefact.fragment,
+  });
+  gl.useProgram(program);
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW,
+  );
+  const location = gl.getAttribLocation(program, artefact.position);
+  gl.enableVertexAttribArray(location);
+  gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0);
+
+  set(artefact.colour, 0.2, 0.4, 0.6);
+
+  gl.viewport(0, 0, 1, 1);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  const out = new Float32Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, out);
+  return [out[0]!, out[1]!, out[2]!];
 }

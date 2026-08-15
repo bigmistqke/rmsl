@@ -52,7 +52,35 @@ export function reflectUniforms(
 }
 
 /**
- * Compiles, links and reflects a program, returning it alongside its setter.
+ * GLSL for both stages, already compiled.
+ *
+ * What a build that precompiles its shaders has instead of a node graph: the
+ * compiler ran at build time, so the browser is handed the finished sources.
+ */
+export interface ShaderSources {
+  vertex: string;
+  fragment: string;
+}
+
+/**
+ * Tells the two forms apart.
+ *
+ * A vertex root is a node, a tuple of them, or nothing at all, and none of
+ * those carries a `vertex` string — so finding one identifies the sources
+ * without the caller having to say which form was meant.
+ */
+function isShaderSources(root: VertexRoot | ShaderSources): root is ShaderSources {
+  return typeof root === "object" && root !== null && typeof (root as ShaderSources).vertex === "string";
+}
+
+/**
+ * Links, reflects and returns a program alongside its setter.
+ *
+ * Takes either a node graph to compile or GLSL that is already compiled. The
+ * second form is for a build that precompiles its shaders: everything after
+ * compilation — linking, cleaning up on failure, and reading back the uniforms
+ * that survived — is the same work either way, and is worth as much to a host
+ * that never ships the compiler.
  *
  * The caller binds the program before setting anything. Binding on every call
  * would make a redundant state change per uniform per frame, and every other
@@ -62,6 +90,28 @@ export function createWebGLProgram(
   gl: WebGL2RenderingContext,
   vertexRoot: VertexRoot,
   fragmentRoot: FragmentRoot,
+): { program: WebGLProgram; set: Setter };
+export function createWebGLProgram(
+  gl: WebGL2RenderingContext,
+  sources: ShaderSources,
+): { program: WebGLProgram; set: Setter };
+export function createWebGLProgram(
+  gl: WebGL2RenderingContext,
+  root: VertexRoot | ShaderSources,
+  fragmentRoot?: FragmentRoot,
+): { program: WebGLProgram; set: Setter } {
+  const sources = isShaderSources(root)
+    ? root
+    : {
+      vertex: compileGLSL.vertex(root),
+      fragment: compileGLSL.fragment(fragmentRoot as FragmentRoot),
+    };
+  return linkProgram(gl, sources);
+}
+
+function linkProgram(
+  gl: WebGL2RenderingContext,
+  sources: ShaderSources,
 ): { program: WebGLProgram; set: Setter } {
   const program = gl.createProgram();
   if (!program) throw new Error("[RMSL] Could not create a program object.");
@@ -69,8 +119,8 @@ export function createWebGLProgram(
   let vertex: WebGLShader | null = null;
   let fragment: WebGLShader | null = null;
   try {
-    vertex = compileShader(gl, gl.VERTEX_SHADER, compileGLSL.vertex(vertexRoot));
-    fragment = compileShader(gl, gl.FRAGMENT_SHADER, compileGLSL.fragment(fragmentRoot));
+    vertex = compileShader(gl, gl.VERTEX_SHADER, sources.vertex);
+    fragment = compileShader(gl, gl.FRAGMENT_SHADER, sources.fragment);
     gl.attachShader(program, vertex);
     gl.attachShader(program, fragment);
     gl.linkProgram(program);

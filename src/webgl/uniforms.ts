@@ -268,6 +268,54 @@ const ARRAY_WRITERS: Record<SettableArrayType, ArrayWriter> = {
 };
 
 /**
+ * What a write needs to know about a uniform, as plain data.
+ *
+ * A build that precompiles its shaders replaces the module that built them
+ * with JSON, so no node survives to run time — but the setter only ever reads
+ * a uniform's name and its shader type, and both of those are strings. A
+ * descriptor is those two strings, which means a precompiled build can write
+ * its uniforms with the same call a run-time build uses.
+ *
+ * `type` here is the shader type, where a node spells that `_t` and uses
+ * `type` for the kind of input it is. The names differ because the shapes are
+ * for different readers: a node's fields are the compiler's, and these are
+ * written into a build artefact a person reads.
+ */
+export interface UniformDescriptor<A extends ShaderType> {
+  readonly name: string;
+  readonly type: A;
+}
+
+/** A uniform array as plain data. `length` is what marks it as an array. */
+export interface UniformArrayDescriptor<A extends ShaderType> {
+  readonly name: string;
+  readonly type: A;
+  readonly length: number;
+}
+
+/**
+ * Turns a node into the plain data a write needs, to be stored in a build
+ * artefact. Runs at build time, where the node still exists.
+ */
+export function describeUniform<A extends SettableType>(
+  node: UniformNode<A>,
+): UniformDescriptor<A>;
+export function describeUniform<A extends SettableArrayType>(
+  node: UniformArrayNode<A>,
+): UniformArrayDescriptor<A>;
+export function describeUniform(
+  node: { name: string },
+): UniformDescriptor<SettableType> | UniformArrayDescriptor<SettableArrayType> {
+  const { name, _t, type, length } = node as {
+    name: string;
+    _t: SettableType;
+    type: string;
+    length: number;
+  };
+  return type === "uniformArray" ? { name, type: _t, length } : { name, type: _t };
+}
+
+/**
  * Writes a shader input, taking the node itself rather than a name.
  *
  * One function rather than one per kind. `UniformNode` narrows `type` to
@@ -288,9 +336,30 @@ const ARRAY_WRITERS: Record<SettableArrayType, ArrayWriter> = {
  * needs a cast, exactly as it does for `_t` above.
  */
 export type Setter = {
-  <A extends SettableType>(node: UniformNode<A>, ...args: UniformArgs[A]): void;
-  <A extends SettableArrayType>(node: UniformArrayNode<A>, data: ArrayData[A]): void;
+  <A extends SettableType>(
+    uniform: UniformNode<A> | UniformDescriptor<A>,
+    ...args: UniformArgs[A]
+  ): void;
+  <A extends SettableArrayType>(
+    uniform: UniformArrayNode<A> | UniformArrayDescriptor<A>,
+    data: ArrayData[A],
+  ): void;
 };
+
+/**
+ * Reads either shape into the three things a write needs.
+ *
+ * A node holds its shader type in `_t` and uses `type` for the kind of input
+ * it is; a descriptor holds the shader type in `type` and has no `_t` at all.
+ * So `_t` being present is what tells the two apart, and an array is marked by
+ * `type === "uniformArray"` on a node and by having a `length` on a descriptor.
+ */
+function read(uniform: any): { name: string; type: string; length?: number } {
+  if (!("_t" in uniform)) return uniform;
+  return uniform.type === "uniformArray"
+    ? { name: uniform.name, type: uniform._t, length: uniform.length }
+    : { name: uniform.name, type: uniform._t };
+}
 
 export function createUniformSetter(
   gl: WebGL2RenderingContext,
@@ -302,13 +371,14 @@ export function createUniformSetter(
 
   // Untyped here and cast to `Setter` on return: one function body cannot
   // itself satisfy an overloaded call signature, only be assignable to it.
-  function set(node: any, ...args: any[]): void {
-    const location = locations.get(node.name);
+  function set(uniform: any, ...args: any[]): void {
+    const { name, type, length } = read(uniform);
+    const location = locations.get(name);
     if (!location) {
-      if (!reported.has(node.name)) {
-        reported.add(node.name);
+      if (!reported.has(name)) {
+        reported.add(name);
         console.warn(
-          `[RMSL] The uniform ${node.name} (${node._t}) is not part of this `
+          `[RMSL] The uniform ${name} (${type}) is not part of this `
           + `program, so setting it does nothing. Usually this means GLSL `
           + `removed it, which it does to any uniform whose value cannot `
           + `reach the shader's output.`,
@@ -317,16 +387,15 @@ export function createUniformSetter(
       return;
     }
 
-    // `type === "uniformArray"` names the actual discriminant — the same one
-    // `isUniformNode`/`isAttributeNode` check in rmsl.ts — rather than
-    // leaning on `length` merely happening to be absent from a scalar node.
-    if (node.type === "uniformArray") {
-      const elementType = node._t as SettableArrayType;
+    // Both shapes have been read down to the same three fields by here, and a
+    // `length` is what either of them carries only when it is an array.
+    if (length !== undefined) {
+      const elementType = type as SettableArrayType;
       const data = args[0];
-      const expected = node.length * ELEMENT_COMPONENTS[elementType];
+      const expected = length * ELEMENT_COMPONENTS[elementType];
       if (data.length !== expected) {
         throw new Error(
-          `[RMSL] ${elementType}[${node.length}] needs ${expected} numbers, `
+          `[RMSL] ${elementType}[${length}] needs ${expected} numbers, `
           + `got ${data.length}.`,
         );
       }
@@ -338,8 +407,8 @@ export function createUniformSetter(
       return;
     }
 
-    const writer = WRITERS[node._t as SettableType];
-    if (!writer) throw new Error(`[RMSL] ${node._t} is not a uniform type that can be set.`);
+    const writer = WRITERS[type as SettableType];
+    if (!writer) throw new Error(`[RMSL] ${type} is not a uniform type that can be set.`);
     writer(gl, location, args);
   }
 

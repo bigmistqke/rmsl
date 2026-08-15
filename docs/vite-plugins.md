@@ -32,6 +32,7 @@ Targets a module whose **default export** is the compiled shader program: the GL
 import {
   Fn, attribute, compileGLSL, uniformRaw, varying, vec2, vec4,
 } from "@random-mesh/rmsl";
+import { describeUniform } from "@random-mesh/rmsl/webgl";
 
 export const uColour = uniformRaw("uColour", "vec3");
 export const vUv = varying("vec2");
@@ -45,7 +46,9 @@ export const vertexFn = Fn(() => {
 export const fragmentFn = Fn(() => vec4(uColour, 1));
 
 export default {
-  uColour: uColour.name,
+  // A uniform is written by type as well as by name, so it is carried as a
+  // descriptor. See [WebGL Bindings](webgl.md#setting-uniforms-without-a-node).
+  uColour: describeUniform(uColour),
   vUv: vUv.name,
   positionAttr: positionAttr.name,
   vertexGLSL: compileGLSL.vertex(vertexFn()),
@@ -53,11 +56,16 @@ export default {
 };
 ```
 
-After the plugin runs, `src/shaders.ts` is effectively `export default {"uColour":"uColour", ...}` — the rmsl graph is gone and the app just reads strings:
+After the plugin runs, `src/shaders.ts` is effectively `export default {"uColour":{"name":"uColour","type":"vec3"}, ...}` — the rmsl graph is gone and the app just reads plain data:
 
 ```typescript
 import shaders from "./shaders";  // plain JSON at runtime
 ```
+
+`@random-mesh/rmsl/webgl` can take it from there without a graph:
+`createWebGLProgram(gl, { vertex, fragment })` links the precompiled sources,
+and `set(shaders.uColour, 1, 0, 0)` writes the uniform with the shader type
+still checked.
 
 The default export must be JSON-serializable (strings, numbers, booleans, arrays, plain objects). A module without a default export, or one whose default export is not serializable, fails the build with a message naming the module.
 

@@ -50,6 +50,33 @@ numbers a driver reports refer to that rather than to your node graph; a link
 error carries the driver's log. Nothing is left allocated on the context when
 it throws.
 
+### Given GLSL you already have
+
+```typescript
+createWebGLProgram(
+  gl: WebGL2RenderingContext,
+  sources: { vertex: string; fragment: string },
+): { program: WebGLProgram; set: Setter }
+```
+
+Takes ready-made GLSL instead of a node graph, and does everything else the
+same way. This is the form for a build that
+[precompiles its shaders](vite-plugins.md): the compiler ran in Node, so the
+browser has the sources but no graph — and linking, cleaning up after a
+failure, and reading back which uniforms survived are all still worth having.
+
+The two forms are told apart by what you pass: a `vertex` string means sources,
+and anything else is a vertex root.
+
+```typescript
+import shaders from "./shaders";   // plain JSON at run time
+
+let { program, set } = createWebGLProgram(gl, {
+  vertex: shaders.vertex,
+  fragment: shaders.fragment,
+});
+```
+
 ## set
 
 One function for every kind of uniform. What it accepts depends on the node you
@@ -182,6 +209,47 @@ linked program. Do not depend on it.
 If you need a fixed name — to share a program with hand-written GLSL, say —
 `uniformRaw("myName", "vec3")` gives you one.
 
+## Setting uniforms without a node
+
+A build that precompiles its shaders has no node left in the browser to hand to
+`set`. A descriptor takes its place: the same name and shader type as plain
+data, which is all `set` ever reads off a node anyway.
+
+```typescript
+describeUniform(node): { name: string; type: A }              // scalar
+describeUniform(arrayNode): { name: string; type: A; length: number }
+```
+
+Call it at build time, in the module the plugin replaces, and store the result
+in the artefact. It is JSON, so it survives being written out and read back:
+
+```typescript
+// src/shaders.ts — evaluated at build time, rewritten to JSON
+import { uniformRaw, compileGLSL } from "@random-mesh/rmsl";
+import { describeUniform } from "@random-mesh/rmsl/webgl";
+
+let uColour = uniformRaw("uColour", "vec3");
+
+export default {
+  uColour: describeUniform(uColour),
+  vertex: compileGLSL.vertex(vertexFn()),
+  fragment: compileGLSL.fragment(fragmentFn()),
+};
+```
+
+```typescript
+// at run time — no rmsl in the bundle
+set(shaders.uColour, 1, 0, 0);
+set(shaders.uColour, 1, 0);      // still a compile error
+```
+
+The checking is the same as for a node, because it never came from the node
+object — it came from the shader type the node carried, and the descriptor
+carries that too.
+
+Attributes and varyings are addressed by name alone, so a bare `node.name` is
+still all the artefact needs for those.
+
 ## Not covered yet
 
 Uniforms only, for now. Attributes, buffers, interleaved vertex data, textures
@@ -204,6 +272,8 @@ Exported for when you need to name them:
 - `UniformArgs` — arguments each shader type takes as a single value
 - `ArrayData` — buffer each element type takes in bulk
 - `SettableType`, `SettableArrayType` — shader types that can be written
+- `UniformDescriptor<A>`, `UniformArrayDescriptor<A>` — a uniform as plain data
+- `ShaderSources` — the `{ vertex, fragment }` pair of GLSL strings
 - `Mat<N>`, `Tuple<N, T>` — the fixed-length matrix contents
 
 `reflectUniforms(gl, program)` is also exported, returning every uniform the

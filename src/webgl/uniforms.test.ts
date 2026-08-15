@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { uniform, uniformArray } from "../rmsl";
-import { createUniformSetter } from "./uniforms";
+import { uniform, uniformArray, uniformRaw } from "../rmsl";
+import { createUniformSetter, describeUniform } from "./uniforms";
 
 /** A stub recording every uniform call, standing in for a GL context. */
 function recorder() {
@@ -275,5 +275,79 @@ describe("a node whose _t has no writer", () => {
     expect(() => set(node)).toThrow(
       "[RMSL] notAShaderType is not a uniform type that can be set.",
     );
+  });
+});
+
+describe("describing a uniform for a precompiled build", () => {
+  // A build that precompiles its shaders does not ship rmsl, so at run time
+  // there is no node to key a write by — only whatever the build step wrote
+  // into JSON. That has to carry the shader type as well as the name, because
+  // the type is what picks the GL call.
+  it("carries the name and the shader type of a scalar uniform", () => {
+    const u = uniformRaw("uColour", "vec3");
+    expect(describeUniform(u)).toEqual({ name: "uColour", type: "vec3" });
+  });
+
+  // A node marks itself an array through `type === "uniformArray"`, which a
+  // descriptor cannot borrow because its `type` already holds the shader type.
+  // Carrying `length` is what tells the two apart, and it is needed anyway to
+  // check a bulk upload's size.
+  it("carries the element count of a uniform array", () => {
+    const u = uniformArray("vec4", 24);
+    expect(describeUniform(u)).toEqual({ name: u.name, type: "vec4", length: 24 });
+  });
+
+  it("survives being written to JSON and read back", () => {
+    const u = uniformRaw("uColour", "vec3");
+    const artefact = JSON.parse(JSON.stringify({ uColour: describeUniform(u) }));
+    expect(artefact.uColour).toEqual({ name: "uColour", type: "vec3" });
+  });
+});
+
+describe("writing through a descriptor instead of a node", () => {
+  it("picks the same call a node of that type picks", () => {
+    const u = uniform("vec3");
+    const fromNode = setterFor(u);
+    fromNode.set(u, 1, 2, 3);
+
+    const described = describeUniform(u);
+    const fromDescriptor = setterFor(described);
+    fromDescriptor.set(described, 1, 2, 3);
+
+    expect(fromDescriptor.calls).toEqual(fromNode.calls);
+  });
+
+  it("writes a whole array through a descriptor", () => {
+    const u = uniformArray("vec4", 2);
+    const described = describeUniform(u);
+    const { set, calls, location } = setterFor(described);
+    const data = new Float32Array(8);
+
+    set(described, data);
+
+    expect(calls).toEqual([{ fn: "uniform4fv", args: [location, data] }]);
+  });
+
+  // The length check exists to catch a buffer that does not match the array it
+  // is written to. A descriptor has to carry `length` for that to still work.
+  it("still checks the buffer length against the element count", () => {
+    const described = describeUniform(uniformArray("vec4", 24));
+    const { set } = setterFor(described);
+
+    expect(() => set(described, new Float32Array(8))).toThrow(
+      "[RMSL] vec4[24] needs 96 numbers, got 8.",
+    );
+  });
+
+  it("names the shader type when the uniform is not part of the program", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { gl } = recorder();
+    const described = describeUniform(uniformRaw("uColour", "vec3"));
+    const set = createUniformSetter(gl, new Map());
+
+    set(described, 1, 2, 3);
+
+    expect(warn.mock.calls[0]?.[0]).toContain("uColour (vec3)");
+    warn.mockRestore();
   });
 });

@@ -8,10 +8,13 @@
  */
 
 export { createWebGLProgram, reflectUniforms } from "./program";
-export { createUniformSetter } from "./uniforms";
+export type { ShaderSources } from "./program";
+export { createUniformSetter, describeUniform } from "./uniforms";
 export type {
   Setter,
   UniformArgs,
+  UniformDescriptor,
+  UniformArrayDescriptor,
   ArrayData,
   SettableType,
   SettableArrayType,

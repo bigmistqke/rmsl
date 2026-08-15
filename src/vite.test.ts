@@ -32,8 +32,10 @@ describe("precompileShaders", () => {
     const result = await plugin.transform(source, SHADERS_PATH);
 
     expect(result).not.toBeNull();
-    expect(result!.code).toMatch(/^export default \{"uColour":"uColour"/);
-    expect(result!.code).toContain('"uColour":"uColour"');
+    expect(result!.code).toMatch(/^export default \{"uColour":\{/);
+    // A uniform is carried as a descriptor rather than a bare name, so the
+    // browser has the shader type as well and can still write it.
+    expect(result!.code).toContain('"uColour":{"name":"uColour","type":"vec3"}');
     expect(result!.code).toContain('"vUv":"_rmsl_v');
     expect(result!.code).toContain('"positionAttr":"_rmsl_a');
     expect(result!.code).toContain('"vertexGLSL"');
@@ -48,7 +50,7 @@ describe("precompileShaders", () => {
     const mod = await importDataUrl(result!.code);
     expect(mod.default.vertexGLSL).toContain("#version 300 es");
     expect(mod.default.fragmentGLSL).toContain("#version 300 es");
-    expect(mod.default.uColour).toBe("uColour");
+    expect(mod.default.uColour).toEqual({ name: "uColour", type: "vec3" });
     expect(mod.default.vUv).toMatch(/^_rmsl_v/);
     expect(mod.default.positionAttr).toMatch(/^_rmsl_a/);
   });

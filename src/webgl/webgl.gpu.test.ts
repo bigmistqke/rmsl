@@ -97,4 +97,15 @@ describe.skipIf(SKIPPED)("against a real context", () => {
     expect(b).toBeCloseTo(0.3, 5);
     expect(a).toBeCloseTo(0.4, 5);
   }, 120_000);
+
+  // The whole point of the descriptor is a build where no node reaches the
+  // browser. Everything before the render here goes through JSON, so a
+  // descriptor that only worked because a live node happened to be nearby
+  // would not survive to be set.
+  it("delivers a uniform set through a descriptor and precompiled sources", async () => {
+    const [r, g, b] = await runInPage("probePrecompiled()");
+    expect(r).toBeCloseTo(0.2, 5);
+    expect(g).toBeCloseTo(0.4, 5);
+    expect(b).toBeCloseTo(0.6, 5);
+  }, 120_000);
 });

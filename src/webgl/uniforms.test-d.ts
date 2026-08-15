@@ -8,9 +8,11 @@
  */
 
 import { describe, it, expectTypeOf } from "vitest";
-import type { UniformArgs, Mat, Tuple } from "./uniforms";
+import type {
+  UniformArgs, Mat, Tuple, UniformDescriptor, UniformArrayDescriptor,
+} from "./uniforms";
 import { uniform, uniformArray, attribute, varying } from "../rmsl";
-import { createUniformSetter } from "./uniforms";
+import { createUniformSetter, describeUniform } from "./uniforms";
 
 declare const set: ReturnType<typeof createUniformSetter>;
 
@@ -136,5 +138,42 @@ describe("uniform arrays", () => {
   it("rejects loose components where an array node expects one buffer", () => {
     // @ts-expect-error an array node takes one buffer argument, not components
     set(uniformArray("vec4", 4), 1, 2, 3, 4);
+  });
+});
+
+/**
+ * A descriptor exists so a precompiled build can write uniforms without a
+ * node. It is only worth having if it keeps the checking the node gives: the
+ * point of keying by node was never the object, it was that the shader type
+ * came along with it and the argument list followed from it.
+ */
+describe("descriptors", () => {
+  it("keeps the shader type, so the argument list still follows from it", () => {
+    expectTypeOf(describeUniform(uniform("vec3"))).toEqualTypeOf<
+      UniformDescriptor<"vec3">
+    >();
+    expectTypeOf(describeUniform(uniformArray("vec4", 4))).toEqualTypeOf<
+      UniformArrayDescriptor<"vec4">
+    >();
+  });
+
+  it("takes the same arguments the node it describes takes", () => {
+    set(describeUniform(uniform("vec3")), 1, 2, 3);
+    set(describeUniform(uniform("mat4")), new Float32Array(16));
+    set(describeUniform(uniformArray("vec4", 4)), new Float32Array(16));
+  });
+
+  it("rejects the wrong component count, as the node does", () => {
+    // @ts-expect-error a vec3 takes three components, not two
+    set(describeUniform(uniform("vec3")), 1, 2);
+  });
+
+  // A descriptor read back from JSON is a plain object, so nothing but its
+  // declared type distinguishes it. That type has to be enough on its own.
+  it("checks a descriptor written by hand the same way", () => {
+    const uColour: UniformDescriptor<"vec3"> = { name: "uColour", type: "vec3" };
+    set(uColour, 1, 2, 3);
+    // @ts-expect-error a vec3 takes three components, not four
+    set(uColour, 1, 2, 3, 4);
   });
 });
