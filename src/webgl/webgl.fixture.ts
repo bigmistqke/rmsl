@@ -92,7 +92,7 @@ export function probeEliminated(): { declared: boolean; warnings: number } {
 
   const vertexMain = Fn(() => vec4(position.x, position.y, 0.0, 1.0));
   const fragmentMain = Fn(() => {
-    unused.mult(2.0).toVar();
+    unused.mul(2.0).toVar();
     return vec4(1.0, 0.0, 0.0, 1.0);
   });
 
