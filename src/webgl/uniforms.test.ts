@@ -304,6 +304,22 @@ describe("describing a uniform for a precompiled build", () => {
   });
 });
 
+// `length()` is a GLSL operation, so every node carries a `length` — on a
+// scalar it is a method, not an element count. Recognising an array by whether
+// `length` is present therefore reads as true for every node, and would send
+// every scalar down the bulk-upload path. The kind is what decides it.
+describe("telling a scalar node from an array node", () => {
+  it("does not mistake a scalar node's length operation for an element count", () => {
+    const u = uniform("vec3");
+    expect(typeof (u as unknown as { length: unknown }).length).toBe("function");
+
+    const { set, calls, location } = setterFor(u);
+    set(u, 1, 2, 3);
+
+    expect(calls).toEqual([{ fn: "uniform3f", args: [location, 1, 2, 3] }]);
+  });
+});
+
 describe("writing through a descriptor instead of a node", () => {
   it("picks the same call a node of that type picks", () => {
     const u = uniform("vec3");

@@ -346,21 +346,6 @@ export type Setter = {
   ): void;
 };
 
-/**
- * Reads either shape into the three things a write needs.
- *
- * A node holds its shader type in `_t` and uses `type` for the kind of input
- * it is; a descriptor holds the shader type in `type` and has no `_t` at all.
- * So `_t` being present is what tells the two apart, and an array is marked by
- * `type === "uniformArray"` on a node and by having a `length` on a descriptor.
- */
-function read(uniform: any): { name: string; type: string; length?: number } {
-  if (!("_t" in uniform)) return uniform;
-  return uniform.type === "uniformArray"
-    ? { name: uniform.name, type: uniform._t, length: uniform.length }
-    : { name: uniform.name, type: uniform._t };
-}
-
 export function createUniformSetter(
   gl: WebGL2RenderingContext,
   locations: Map<string, WebGLUniformLocation>,
@@ -372,7 +357,21 @@ export function createUniformSetter(
   // Untyped here and cast to `Setter` on return: one function body cannot
   // itself satisfy an overloaded call signature, only be assignable to it.
   function set(uniform: any, ...args: any[]): void {
-    const { name, type, length } = read(uniform);
+    // Read in place rather than normalised into an object: this runs for every
+    // uniform of every frame, and the two shapes differ in field names only.
+    //
+    // A node holds its shader type in `_t` and the kind of input it is in
+    // `type`; a descriptor has no `_t` and holds the shader type in `type`.
+    // Which of the two decides how an array is recognised, and a node's answer
+    // cannot be `length`: every node has one, because `length()` is the GLSL
+    // operation, so on a scalar it is a method rather than an element count.
+    const isNode = "_t" in uniform;
+    const type: string = isNode ? uniform._t : uniform.type;
+    const isArray = isNode
+      ? uniform.type === "uniformArray"
+      : typeof uniform.length === "number";
+
+    const name: string = uniform.name;
     const location = locations.get(name);
     if (!location) {
       if (!reported.has(name)) {
@@ -387,10 +386,9 @@ export function createUniformSetter(
       return;
     }
 
-    // Both shapes have been read down to the same three fields by here, and a
-    // `length` is what either of them carries only when it is an array.
-    if (length !== undefined) {
+    if (isArray) {
       const elementType = type as SettableArrayType;
+      const length: number = uniform.length;
       const data = args[0];
       const expected = length * ELEMENT_COMPONENTS[elementType];
       if (data.length !== expected) {
